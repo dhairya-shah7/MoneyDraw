@@ -1,0 +1,331 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                        Int      @id @default(autoincrement())
+  username                  String   @unique
+  mobile                    String   @unique
+  email                     String
+  passwordHash              String
+  tpin                      String   @default("1234")
+  firstName                 String
+  lastName                  String
+  roleCode                  String   @default("RETAILER") // SUPER_ADMIN, ADMIN, DISTRIBUTOR, RETAILER, STAFF
+  roleName                  String   @default("Retailer")
+  parentId                  Int?
+  parentName                String?
+  parentMobile              String?
+  status                    String   @default("active") // active, blocked, inactive
+  kycStatus                 String   @default("approved") // pending, approved, rejected
+  companyName               String   @default("")
+  businessType              String   @default("Retail")
+  address                   String   @default("")
+  city                      String   @default("")
+  state                     String   @default("")
+  pinCode                   String   @default("")
+  dob                       String   @default("1995-01-01")
+  panNumber                 String   @default("")
+  aadhaarNumber             String   @default("")
+  canCreateDownline         Boolean  @default(false)
+  needCashEnabled           Boolean  @default(true)
+  isCmsAepsHead             Boolean  @default(false)
+  isBusinessManager         Boolean  @default(false)
+  reconciliationEnabled     Boolean  @default(true)
+  schemeId                  Int?
+  apiKey                    String   @default("mdraw-live-key-9081047006")
+  webhookUrl                String   @default("")
+  allowedIp                 String   @default("")
+  aepsOnboarded             Boolean  @default(true)
+  aepsMerchantKyc           Boolean  @default(true)
+  aepsBankKyc               Boolean  @default(true)
+  aepsDaily2faDate          String   @default("")
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  wallet                    Wallet?
+  ledgerEntries             LedgerEntry[]
+  transactions              Transaction[]
+  fundRequests              FundRequest[]
+  settlementAccounts        SettlementAccount[]
+  settlementRequests        SettlementRequest[]
+}
+
+model Wallet {
+  id                        Int      @id @default(autoincrement())
+  userId                    Int      @unique
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  availableBalance          Float    @default(0) // Main spendable wallet
+  aepsBalance               Float    @default(0) // AEPS & UPI Cash wallet
+  commissionBalance         Float    @default(0) // Accrued commission wallet
+  holdBalance               Float    @default(0)
+  capBalance                Float    @default(0)
+  overdraftLimit            Float    @default(0)
+  recoveryDebt              Float    @default(0)
+  commissionLocked          Boolean  @default(false)
+  updatedAt                 DateTime @updatedAt
+}
+
+model LedgerEntry {
+  id                        Int      @id @default(autoincrement())
+  userId                    Int
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userMobile                String
+  userName                  String
+  bucket                    String   // main, aeps, commission, hold
+  entryType                 String   // transaction_debit, commission_credit, fund_load, aeps_credit, settlement, adjustment, p2p_transfer
+  direction                 String   // credit, debit
+  amount                    Float
+  openingBalance            Float
+  closingBalance            Float
+  transactionRef            String
+  remarks                   String
+  metadataJson              String   @default("{}")
+  createdAt                 DateTime @default(now())
+}
+
+model Service {
+  id                        Int      @id @default(autoincrement())
+  code                      String   @unique // PAYOUT, AEPS, UPI_CASH, RECHARGE, BILLPAY, CMS, ACCOUNT_VERIFY
+  name                      String
+  category                  String   // payout, aeps, recharge, billpay, cms, account_verify
+  active                    Boolean  @default(true)
+  requiresKyc               Boolean  @default(true)
+  tpinRequired              Boolean  @default(true)
+  minAmount                 Float    @default(10)
+  maxAmount                 Float    @default(200000)
+  primaryProvider           String   @default("Fingpay")
+  backupProvider            String   @default("PaySprint")
+}
+
+model CommissionScheme {
+  id                        Int      @id @default(autoincrement())
+  name                      String
+  roleCode                  String   @default("RETAILER")
+  isDefault                 Boolean  @default(false)
+  active                    Boolean  @default(true)
+  slabs                     CommissionSlab[]
+}
+
+model CommissionSlab {
+  id                        Int              @id @default(autoincrement())
+  schemeId                  Int
+  scheme                    CommissionScheme @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  serviceCode               String           // PAYOUT, AEPS, UPI_CASH, RECHARGE, BILLPAY, CMS
+  operatorCode              String           @default("ALL")
+  minAmount                 Float
+  maxAmount                 Float
+  chargeType                String           @default("flat") // flat, percent
+  surcharge                 Float            @default(0)      // Customer/Retailer fee (for Payout/DMT)
+  retailerComm              Float            @default(0)      // Commission paid to Retailer
+  distributorComm           Float            @default(0)      // Override paid to Upline Distributor
+  adminMargin               Float            @default(0)      // Platform net margin
+  gstPercent                Float            @default(18)
+  tdsPercent                Float            @default(5)
+}
+
+model Transaction {
+  id                        Int      @id @default(autoincrement())
+  reference                 String   @unique
+  userId                    Int
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userMobile                String
+  userName                  String
+  serviceCode               String   // PAYOUT, AEPS_CW, AEPS_CD, AEPS_AP, AEPS_BE, AEPS_MS, UPI_CASH, RECHARGE, BILLPAY, CMS
+  serviceName               String
+  category                  String   // payout, aeps, upi_cash, recharge, billpay, cms
+  operatorName              String
+  customerMobile            String   @default("")
+  customerName              String   @default("")
+  accountOrVpa              String   @default("")
+  bankName                  String   @default("")
+  ifsc                      String   @default("")
+  transferMode              String   @default("IMPS")
+  amount                    Float
+  surcharge                 Float    @default(0)
+  gst                       Float    @default(0)
+  tds                       Float    @default(0)
+  commission                Float    @default(0)
+  distributorComm           Float    @default(0)
+  adminMargin               Float    @default(0)
+  totalDebit                Float    @default(0)
+  walletBucket              String   @default("main") // main or aeps
+  status                    String   @default("success") // success, pending, failed, reversed, expired
+  providerName              String   @default("Fingpay")
+  providerTxnId             String   @default("")
+  bankRrn                   String   @default("")
+  failureReason             String   @default("")
+  commissionChainJson       String   @default("[]")
+  extraDataJson             String   @default("{}")
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+}
+
+model PayoutRemitter {
+  id                        Int                 @id @default(autoincrement())
+  userId                    Int
+  mobile                    String
+  name                      String
+  monthlyLimit              Float               @default(200000)
+  usedLimit                 Float               @default(0)
+  verified                  Boolean             @default(true)
+  createdAt                 DateTime            @default(now())
+  beneficiaries             PayoutBeneficiary[]
+}
+
+model PayoutBeneficiary {
+  id                        Int            @id @default(autoincrement())
+  remitterId                Int
+  remitter                  PayoutRemitter @relation(fields: [remitterId], references: [id], onDelete: Cascade)
+  accountHolderName         String
+  bankName                  String
+  accountNumber             String
+  ifsc                      String
+  verified                  Boolean        @default(true)
+  verifiedName              String         @default("")
+  createdAt                 DateTime       @default(now())
+}
+
+model UpiCashSession {
+  id                        Int      @id @default(autoincrement())
+  reference                 String   @unique
+  userId                    Int
+  userMobile                String
+  amount                    Float
+  vpa                       String   @default("moneydraw.merchant@icici")
+  qrPayload                 String
+  status                    String   @default("pending") // pending, success, expired, failed
+  payerName                 String   @default("")
+  payerVpa                  String   @default("")
+  bankRrn                   String   @default("")
+  providerTxnId             String   @default("")
+  expirySeconds             Int      @default(180)
+  settledAt                 DateTime?
+  createdAt                 DateTime @default(now())
+}
+
+model CompanyBankAccount {
+  id                        Int      @id @default(autoincrement())
+  label                     String
+  bankName                  String
+  accountHolderName         String
+  accountNumber             String
+  ifsc                      String
+  upiId                     String   @default("")
+  dailyLimit                Float    @default(500000)
+  currentDayVolume          Float    @default(0)
+  priority                  Int      @default(1)
+  active                    Boolean  @default(true)
+  createdAt                 DateTime @default(now())
+}
+
+model FundRequest {
+  id                        Int      @id @default(autoincrement())
+  userId                    Int
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userMobile                String
+  userName                  String
+  userCompanyName           String
+  amount                    Float
+  receivedAmount            Float?
+  walletTarget              String   @default("main") // main, aeps
+  paymentDate               String
+  method                    String   @default("bank") // upi, bank, cash, gateway
+  transferMode              String   @default("IMPS")
+  companyBankName           String   @default("")
+  companyBankAccount        String   @default("")
+  paymentReference          String   @unique // UTR / RRN deduplicated!
+  bankUtr                   String   @default("")
+  screenshotUrl             String   @default("")
+  receiptName               String   @default("")
+  ocrExtractedJson          String   @default("{}")
+  note                      String   @default("")
+  disputeReason             String   @default("")
+  status                    String   @default("pending") // pending, verifying, approved, mismatch, rejected
+  reviewedByName            String   @default("")
+  reviewNote                String   @default("")
+  reviewedAt                DateTime?
+  createdAt                 DateTime @default(now())
+}
+
+model CashRequest {
+  id                        Int      @id @default(autoincrement())
+  reference                 String   @unique
+  requesterId               Int
+  requesterMobile           String
+  requesterName             String
+  requesterRole             String
+  responderId               Int
+  responderMobile           String
+  responderName             String
+  responderRole             String
+  amount                    Float
+  walletTarget              String   @default("main")
+  note                      String   @default("")
+  status                    String   @default("pending") // pending, approved, rejected, cancelled
+  reviewNote                String   @default("")
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+}
+
+model SettlementAccount {
+  id                        Int      @id @default(autoincrement())
+  userId                    Int
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountHolderName         String
+  bankName                  String
+  accountNumber             String
+  ifsc                      String
+  verificationStatus        String   @default("verified") // pending, verified, failed
+  approvalStatus            String   @default("approved") // pending, approved, rejected
+  createdAt                 DateTime @default(now())
+}
+
+model SettlementRequest {
+  id                        Int      @id @default(autoincrement())
+  reference                 String   @unique
+  userId                    Int
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId                 Int
+  bankName                  String
+  accountNumber             String
+  ifsc                      String
+  transferMode              String   @default("IMPS")
+  amount                    Float
+  charge                    Float    @default(10)
+  netAmount                 Float
+  bankRrn                   String   @default("")
+  status                    String   @default("success")
+  createdAt                 DateTime @default(now())
+}
+
+model OnboardingApplication {
+  id                        Int      @id @default(autoincrement())
+  applicantName             String
+  mobile                    String
+  email                     String
+  requestedRole             String   @default("RETAILER")
+  parentMobile              String   @default("7506007000")
+  parentName                String   @default("AGS CORPORATION")
+  companyName               String
+  businessType              String   @default("Retail")
+  panNumber                 String
+  aadhaarMasked             String
+  digilockerVerified        Boolean  @default(true)
+  bankVerified              Boolean  @default(true)
+  bankName                  String
+  accountNumber             String
+  ifsc                      String
+  city                      String
+  state                     String
+  pinCode                   String
+  status                    String   @default("pending") // pending, approved, rejected
+  reviewerNote              String   @default("")
+  createdAt                 DateTime @default(now())
+}

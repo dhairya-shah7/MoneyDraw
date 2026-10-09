@@ -1,0 +1,12 @@
+{
+  "bankName": "Kotak Mahindra Bank",
+  "accountNumber": "9974366033",
+  "ifsc": "KKBK0002626",
+  "upiId": "9974366033@kotak",
+  "accountHolder": "AGS",
+  "availableBalance": null,
+  "lastSmsText": "",
+  "lastUtr": null,
+  "lastTxnAmount": null,
+  "updatedAt": null
+}
