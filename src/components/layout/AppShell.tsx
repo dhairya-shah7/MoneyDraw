@@ -23,6 +23,7 @@ import {
   ClipboardCheck,
   Sparkles,
   ChevronRight,
+  Menu,
   X,
 } from 'lucide-react';
 import { useApp } from '@/components/providers/AppContext';
@@ -60,9 +61,15 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
   const [cmdOpen, setCmdOpen] = useState(false);
   const [cmdQuery, setCmdQuery] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const isAdmin = user?.roleCode === 'SUPER_ADMIN' || user?.roleCode === 'ADMIN';
   const isStaff = user?.roleCode === 'STAFF';
+
+  // Automatically close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   // Enforce Strict Role-Based Route Protection
   useEffect(() => {
@@ -119,7 +126,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     { label: 'Staff Queue', href: '/staff', icon: ShieldCheck },
   ];
 
-  // Strict separation: Admin only sees Admin Console; Retailer only sees Retailer Menu
   const navSections = isAdmin
     ? [{ title: 'Admin Console', items: adminNav }]
     : isStaff
@@ -162,9 +168,9 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex">
-      {/* Sidebar */}
-      <aside className="w-60 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 sticky top-0 h-screen">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col md:flex-row">
+      {/* Desktop Sidebar (hidden on mobile) */}
+      <aside className="hidden md:flex w-60 bg-white border-r border-slate-200 flex-col justify-between shrink-0 sticky top-0 h-screen z-20">
         <div className="flex flex-col min-h-0 flex-1">
           {/* Brand Header */}
           <div className="h-15 px-4 flex items-center justify-between border-b border-slate-100 shrink-0">
@@ -186,7 +192,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             <div className="font-bold text-xs text-slate-900 truncate">
               {user ? `${user.firstName} ${user.lastName}` : 'Loading...'}
             </div>
-            <div className="text-[11px] text-slate-500 truncate">
+            <div className="text-[11px] text-slate-500 truncate font-mono">
               {user?.email || user?.mobile || ''}
             </div>
           </div>
@@ -238,18 +244,155 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
+      {/* Mobile Slide-Over Drawer with Backdrop */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          {/* Semi-transparent Backdrop */}
+          <div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+
+          {/* Drawer Panel */}
+          <aside className="relative w-72 max-w-[85vw] bg-white h-full shadow-2xl flex flex-col justify-between z-10 animate-in slide-in-from-left duration-200">
+            <div className="flex flex-col min-h-0 flex-1">
+              {/* Brand Header & Close Button */}
+              <div className="h-15 px-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+                <Link
+                  href={isAdmin ? '/admin' : isStaff ? '/staff' : '/user'}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-2.5"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white font-black text-base flex items-center justify-center shadow-xs">
+                    M
+                  </div>
+                  <div className="font-black text-base tracking-tight text-slate-900">
+                    MoneyDraw
+                  </div>
+                </Link>
+                <button
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                  aria-label="Close Navigation"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Active User Card & Mobile Balances */}
+              <div className="p-3.5 border-b border-slate-100 bg-slate-50 shrink-0 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="font-bold text-xs text-slate-900 truncate">
+                    {user ? `${user.firstName} ${user.lastName}` : 'Merchant'}
+                  </div>
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-blue-100 text-blue-800">
+                    {user?.roleName || 'Retailer'}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-500 font-mono truncate">
+                  {user?.mobile || user?.email}
+                </div>
+
+                {/* Mobile Wallet Summary */}
+                <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between">
+                  <div>
+                    <div className="text-[9px] uppercase font-bold text-slate-400">Main Wallet</div>
+                    <div className="text-xs font-black text-slate-900 font-mono">
+                      {formatINR(user?.wallet?.availableBalance)}
+                    </div>
+                  </div>
+                  <div className="h-6 w-px bg-slate-200" />
+                  <div>
+                    <div className="text-[9px] uppercase font-bold text-violet-600">Commission</div>
+                    <div className="text-xs font-black text-violet-700 font-mono">
+                      {formatINR(user?.wallet?.commissionBalance)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Navigation Links */}
+              <nav className="p-3 space-y-3 overflow-y-auto flex-1">
+                {navSections.map((section) => (
+                  <div key={section.title} className="space-y-1">
+                    <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      {section.title}
+                    </div>
+                    {section.items.map((item) => {
+                      const Icon = item.icon;
+                      const active = pathname === item.href;
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setMobileMenuOpen(false)}
+                          className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                            active
+                              ? 'bg-blue-600 text-white shadow-xs font-bold'
+                              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          }`}
+                        >
+                          <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-white' : 'text-slate-400'}`} />
+                          <span className="truncate">{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ))}
+              </nav>
+            </div>
+
+            {/* Sign Out Button in Drawer */}
+            <div className="p-3 border-t border-slate-200 bg-slate-50 shrink-0">
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  logout();
+                  router.push('/login');
+                }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign Out
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
+
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Bar */}
-        <header className="h-15 bg-white/95 backdrop-blur-xs border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-30">
-          <div className="flex items-center gap-2.5">
+        {/* Top Header Bar */}
+        <header className="h-15 bg-white/95 backdrop-blur-xs border-b border-slate-200 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-30">
+          <div className="flex items-center gap-2 sm:gap-2.5">
+            {/* Hamburger Button on Mobile */}
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="md:hidden p-2 -ml-1 rounded-xl text-slate-700 hover:bg-slate-100 focus:outline-none cursor-pointer"
+              aria-label="Open Navigation Menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            {/* Mobile Brand Logo */}
+            <Link
+              href={isAdmin ? '/admin' : isStaff ? '/staff' : '/user'}
+              className="md:hidden flex items-center gap-1.5 mr-1"
+            >
+              <div className="w-7 h-7 rounded-lg bg-blue-600 text-white font-black text-xs flex items-center justify-center shadow-xs">
+                M
+              </div>
+              <span className="font-black text-sm text-slate-900 hidden xs:inline">MoneyDraw</span>
+            </Link>
+
+            {/* Search Button */}
             <button
               onClick={() => setCmdOpen(true)}
-              className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200/70 border border-slate-200 text-xs text-slate-500 transition w-56 cursor-pointer"
+              className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200/70 border border-slate-200 text-xs text-slate-500 transition w-auto sm:w-52 cursor-pointer"
             >
               <Search className="w-3.5 h-3.5 text-slate-400" />
-              <span className="flex-1 text-left truncate">Search...</span>
-              <kbd className="px-1.5 py-0.5 text-[10px] font-mono font-bold bg-white text-slate-600 rounded border border-slate-200">
+              <span className="hidden sm:inline flex-1 text-left truncate">Search...</span>
+              <kbd className="hidden sm:inline px-1.5 py-0.5 text-[10px] font-mono font-bold bg-white text-slate-600 rounded border border-slate-200">
                 Ctrl K
               </kbd>
             </button>
@@ -257,34 +400,35 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             {isAdmin && (
               <Link
                 href="/admin/users"
-                className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition"
+                className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition"
               >
                 <Users className="w-3.5 h-3.5" />
-                Transfer Balance to Retailer
+                Transfer to Retailer
               </Link>
             )}
           </div>
 
-          {/* Wallet Strip (Main + Commission) */}
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-1.5">
+          {/* Right Section: Compact Wallet Strip & Soundbox */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5">
+            {/* Wallet Strip */}
+            <div className="flex items-center gap-2 sm:gap-3 bg-slate-50 border border-slate-200 rounded-xl px-2 sm:px-3 py-1.5">
               <div>
-                <div className="text-[10px] font-semibold text-slate-400 uppercase leading-none">Main Wallet</div>
-                <div className="text-xs font-black text-slate-900 mt-0.5">
+                <div className="text-[9px] sm:text-[10px] font-semibold text-slate-400 uppercase leading-none">Main</div>
+                <div className="text-[11px] sm:text-xs font-black text-slate-900 font-mono mt-0.5">
                   {formatINR(user?.wallet?.availableBalance)}
                 </div>
               </div>
-              <div className="h-5 w-px bg-slate-200" />
+              <div className="h-4 sm:h-5 w-px bg-slate-200" />
               <div>
-                <div className="text-[10px] font-semibold text-violet-600 uppercase leading-none">Commission</div>
-                <div className="text-xs font-black text-violet-700 mt-0.5">
+                <div className="text-[9px] sm:text-[10px] font-semibold text-violet-600 uppercase leading-none">Comm</div>
+                <div className="text-[11px] sm:text-xs font-black text-violet-700 font-mono mt-0.5">
                   {formatINR(user?.wallet?.commissionBalance)}
                 </div>
               </div>
             </div>
 
             {/* Soundbox Toggle */}
-            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1">
+            <div className="flex items-center gap-0.5 sm:gap-1 bg-slate-50 border border-slate-200 rounded-xl p-0.5 sm:p-1">
               <button
                 onClick={() => {
                   const next = !soundboxEnabled;
@@ -293,18 +437,19 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
                     speakSoundbox('Voice Soundbox Active', 'Soundbox Chalu Ho Gaya Hai');
                   }
                 }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                className={`flex items-center gap-1 p-1 sm:px-2.5 sm:py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
                   soundboxEnabled
                     ? 'bg-blue-600 text-white shadow-2xs'
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
+                title="Toggle Soundbox"
               >
                 {soundboxEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-                <span className="hidden sm:inline">Sound</span>
+                <span className="hidden md:inline">Sound</span>
               </button>
               <button
                 onClick={() => setSoundboxLang(soundboxLang === 'en-IN' ? 'hi-IN' : 'en-IN')}
-                className="px-1.5 py-1 rounded-lg text-[10px] font-bold text-slate-600 hover:bg-white cursor-pointer"
+                className="px-1.5 py-0.5 sm:py-1 rounded-lg text-[10px] font-bold text-slate-600 hover:bg-white cursor-pointer"
               >
                 {soundboxLang === 'hi-IN' ? 'HI' : 'EN'}
               </button>
@@ -314,7 +459,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
         {/* Toast Notifications */}
         {toasts.length > 0 && (
-          <div className="fixed bottom-5 right-5 z-50 space-y-2 w-88">
+          <div className="fixed bottom-16 md:bottom-5 right-3 md:right-5 z-50 space-y-2 w-[calc(100vw-24px)] max-w-sm">
             {toasts.map((t) => (
               <div
                 key={t.id}
@@ -335,12 +480,48 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <main className="p-5 flex-1 max-w-[1400px] w-full mx-auto">{children}</main>
+        {/* Main Content Area */}
+        <main className="p-3 sm:p-5 flex-1 max-w-[1400px] w-full mx-auto pb-20 md:pb-6">{children}</main>
+
+        {/* Mobile Bottom Navigation Bar (md:hidden) */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 flex items-center justify-around shadow-lg">
+          {(isAdmin
+            ? [
+                { label: 'Overview', href: '/admin', icon: LayoutDashboard },
+                { label: 'Retailers', href: '/admin/users', icon: Users },
+                { label: 'Requests', href: '/admin/payments', icon: Wallet },
+                { label: 'Banks', href: '/admin/settings', icon: Settings },
+                { label: 'Ledger', href: '/admin/reconciliation', icon: Scale },
+              ]
+            : [
+                { label: 'Home', href: '/user', icon: LayoutDashboard },
+                { label: 'Wallet', href: '/user/wallet', icon: Wallet },
+                { label: 'Services', href: '/user/services', icon: Zap },
+                { label: 'Reports', href: '/user/reports', icon: FileBarChart2 },
+                { label: 'Account', href: '/user/account', icon: Settings },
+              ]
+          ).map((tab) => {
+            const Icon = tab.icon;
+            const active = pathname === tab.href;
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all ${
+                  active ? 'text-blue-600 font-bold' : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <Icon className={`w-4 h-4 ${active ? 'text-blue-600 stroke-[2.5]' : 'stroke-2'}`} />
+                <span className="text-[10px] mt-0.5">{tab.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
       </div>
 
       {/* Ctrl+K Command Palette */}
       {cmdOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 backdrop-blur-xs pt-20 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 backdrop-blur-xs pt-16 sm:pt-20 p-4">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
             <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200">
               <Sparkles className="w-4 h-4 text-blue-600" />
