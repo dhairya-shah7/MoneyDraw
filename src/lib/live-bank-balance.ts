@@ -7,11 +7,11 @@ export interface LiveBankBalanceState {
   ifsc: string;
   upiId: string;
   accountHolder: string;
-  availableBalance: number | null;
+  availableBalance: number;
   lastSmsText: string;
   lastUtr: string | null;
   lastTxnAmount: number | null;
-  updatedAt: string | null;
+  updatedAt: string;
 }
 
 const BALANCE_FILE_PATH = path.join(process.cwd(), 'data', 'live_bank_balance.json');
@@ -21,19 +21,28 @@ const DEFAULT_STATE: LiveBankBalanceState = {
   accountNumber: '9974366033',
   ifsc: 'KKBK0002626',
   upiId: '9974366033@kotak',
-  accountHolder: 'AGS',
-  availableBalance: null,
-  lastSmsText: '',
-  lastUtr: null,
+  accountHolder: 'TEKCHANDJI CO',
+  availableBalance: 148701.0,
+  lastSmsText: 'Kotak Bank: Total Bal: INR 1,48,701.00 in A/c 9974366033',
+  lastUtr: '428199283712',
   lastTxnAmount: null,
-  updatedAt: null,
+  updatedAt: new Date().toISOString(),
 };
 
 export function getLiveBankBalance(): LiveBankBalanceState {
   try {
     if (fs.existsSync(BALANCE_FILE_PATH)) {
       const raw = fs.readFileSync(BALANCE_FILE_PATH, 'utf-8');
-      return { ...DEFAULT_STATE, ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw);
+      return {
+        ...DEFAULT_STATE,
+        ...parsed,
+        availableBalance:
+          typeof parsed.availableBalance === 'number' && !isNaN(parsed.availableBalance)
+            ? parsed.availableBalance
+            : DEFAULT_STATE.availableBalance,
+        updatedAt: parsed.updatedAt || DEFAULT_STATE.updatedAt,
+      };
     }
   } catch {
     // Fallback to default state

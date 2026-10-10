@@ -3,12 +3,12 @@ import QRCode from 'qrcode';
 import { prisma } from '@/lib/prisma';
 import { recordWalletMovement, WalletBucket } from '@/lib/ledger';
 import { broadcastEvent } from '@/lib/sse-hub';
-import { getLiveBankBalance } from '@/lib/live-bank-balance';
+import { getLiveBankBalance, updateLiveBankBalance } from '@/lib/live-bank-balance';
 
 export async function GET(req: NextRequest) {
   try {
     const users = await prisma.user.findMany({
-      include: { wallet: true },
+      include: { wallet: true, settlementAccounts: true },
       orderBy: { id: 'asc' },
     });
 
@@ -159,6 +159,214 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         fundRequest: updated,
         message: `Fund Request #${updated.id} ${updated.status} (₹${finalCreditAmount})`,
+      });
+    }
+
+    if (action === 'admin_transfer_to_retailer') {
+      const {
+        retailerId,
+        amount,
+        fundingSource = 'admin_wallet', // 'admin_wallet' | 'company_bank'
+        transferDestination = 'retailer_wallet', // 'retailer_wallet' | 'retailer_bank'
+        tpin,
+        remarks = 'Treasury Payout to Retailer',
+        bankAccountDetails,
+      } = body;
+
+      const numAmount = Number(amount);
+      if (isNaN(numAmount) || numAmount <= 0) {
+        return NextResponse.json({ error: 'Please enter a valid transfer amount (> 0).' }, { status: 400 });
+      }
+
+      // 1. Verify Super Admin and TPIN
+      const adminUser =
+        (await prisma.user.findFirst({
+          where: { roleCode: 'SUPER_ADMIN' },
+          include: { wallet: true },
+        })) ||
+        (await prisma.user.findFirst({
+          where: { mobile: '9999999999' },
+          include: { wallet: true },
+        }));
+
+      if (!adminUser) {
+        return NextResponse.json({ error: 'Super Admin account not found.' }, { status: 404 });
+      }
+
+      const cleanTpin = String(tpin || '').trim();
+      if (!cleanTpin) {
+        return NextResponse.json({ error: 'Admin TPIN is required to authorize transfer.' }, { status: 400 });
+      }
+
+      if (adminUser.tpin && adminUser.tpin !== cleanTpin) {
+        return NextResponse.json(
+          { error: 'Security Verification Failed: Incorrect Admin TPIN.' },
+          { status: 401 }
+        );
+      }
+
+      // 2. Fetch Retailer
+      const retailer = await prisma.user.findUnique({
+        where: { id: Number(retailerId) },
+        include: { wallet: true, settlementAccounts: true },
+      });
+
+      if (!retailer) {
+        return NextResponse.json({ error: 'Target retailer account not found.' }, { status: 404 });
+      }
+
+      const ref = `ADM-TRF-${Date.now().toString().slice(-7)}`;
+      const bankUtr = `KKBKH${Date.now().toString().slice(-8)}`;
+
+      let adminBalAfter = adminUser.wallet?.availableBalance || 0;
+      let kotakBalAfter: number | null = null;
+      let retailerBalAfter = retailer.wallet?.availableBalance || 0;
+
+      // 3. Handle Funding Source (DEBIT)
+      if (fundingSource === 'admin_wallet') {
+        if (!adminUser.wallet || adminUser.wallet.availableBalance < numAmount) {
+          return NextResponse.json(
+            {
+              error: `Insufficient Admin Treasury Balance! Available: ₹${adminUser.wallet?.availableBalance.toLocaleString('en-IN') || 0}`,
+            },
+            { status: 400 }
+          );
+        }
+
+        const adminMovement = await recordWalletMovement({
+          userId: adminUser.id,
+          bucket: 'main',
+          direction: 'debit',
+          entryType: 'transaction_debit',
+          amount: numAmount,
+          transactionRef: ref,
+          remarks: `Treasury Transfer to ${retailer.firstName} ${retailer.lastName} (${retailer.mobile})`,
+        });
+        adminBalAfter = adminMovement.wallet.availableBalance;
+      } else if (fundingSource === 'company_bank') {
+        const liveBank = getLiveBankBalance();
+        if (liveBank.availableBalance < numAmount) {
+          return NextResponse.json(
+            {
+              error: `Insufficient Kotak Bank Balance! Available: ₹${liveBank.availableBalance.toLocaleString('en-IN')}`,
+            },
+            { status: 400 }
+          );
+        }
+
+        kotakBalAfter = liveBank.availableBalance - numAmount;
+        updateLiveBankBalance({
+          availableBalance: kotakBalAfter,
+          lastTxnAmount: numAmount,
+          lastSmsText: `Kotak Bank: INR ${numAmount.toFixed(2)} debited from A/c 9974366033 to Retailer ${retailer.firstName}. Avl Bal: INR ${kotakBalAfter.toFixed(2)}`,
+        });
+
+        // Update company bank volume
+        const kotakBank = await prisma.companyBankAccount.findFirst({
+          where: { accountNumber: '9974366033' },
+        });
+        if (kotakBank) {
+          await prisma.companyBankAccount.update({
+            where: { id: kotakBank.id },
+            data: { currentDayVolume: (kotakBank.currentDayVolume || 0) + numAmount },
+          });
+        }
+      }
+
+      // 4. Handle Transfer Destination (CREDIT or Bank Payout)
+      let destinationAccount = retailer.mobile;
+      let destinationBank = 'MoneyDraw Wallet';
+      let destinationIfsc = 'INTERNAL';
+
+      if (transferDestination === 'retailer_wallet') {
+        const retMovement = await recordWalletMovement({
+          userId: retailer.id,
+          bucket: 'main',
+          direction: 'credit',
+          entryType: 'fund_load',
+          amount: numAmount,
+          transactionRef: ref,
+          remarks: remarks || `Admin Payout from ${fundingSource === 'admin_wallet' ? 'Treasury Wallet' : 'Kotak Bank'}`,
+        });
+        retailerBalAfter = retMovement.wallet.availableBalance;
+      } else if (transferDestination === 'retailer_bank') {
+        const targetAcc =
+          retailer.settlementAccounts?.[0] || bankAccountDetails || {
+            bankName: 'Verified Retailer Bank',
+            accountNumber: retailer.mobile,
+            ifsc: 'BANK0001234',
+          };
+        destinationAccount = targetAcc.accountNumber || retailer.mobile;
+        destinationBank = targetAcc.bankName || 'Retailer Settlement Bank';
+        destinationIfsc = targetAcc.ifsc || 'KKBK0002626';
+      }
+
+      // 5. Create Auditable Transaction Record
+      const sourceName = fundingSource === 'admin_wallet' ? 'Admin Treasury Wallet' : 'Kotak Bank A/c 9974366033';
+      const destName = transferDestination === 'retailer_wallet' ? 'Retailer Main Wallet' : `${destinationBank} (${destinationAccount})`;
+
+      const tx = await prisma.transaction.create({
+        data: {
+          reference: ref,
+          providerName: fundingSource === 'admin_wallet' ? 'Admin Treasury Switch' : 'Kotak Direct Banking Switch',
+          providerTxnId: `ADM-TXN-${Date.now().toString().slice(-7)}`,
+          bankRrn: bankUtr,
+          userId: adminUser.id,
+          userMobile: adminUser.mobile,
+          userName: `${adminUser.firstName} ${adminUser.lastName}`.trim(),
+          serviceCode: 'ADMIN_TRANSFER',
+          serviceName: transferDestination === 'retailer_wallet' ? 'Admin Treasury Wallet Load' : 'Admin Bank Payout',
+          category: 'payout',
+          operatorName: `${sourceName} → ${destName}`,
+          customerMobile: retailer.mobile,
+          customerName: retailer.companyName || `${retailer.firstName} ${retailer.lastName}`.trim(),
+          accountOrVpa: destinationAccount,
+          bankName: destinationBank,
+          ifsc: destinationIfsc,
+          transferMode: fundingSource === 'company_bank' ? 'IMPS' : 'INTERNAL',
+          amount: numAmount,
+          surcharge: 0,
+          gst: 0,
+          tds: 0,
+          commission: 0,
+          distributorComm: 0,
+          adminMargin: 0,
+          totalDebit: numAmount,
+          walletBucket: 'main',
+          status: 'success',
+          extraDataJson: JSON.stringify({
+            fundingSource,
+            transferDestination,
+            adminBalanceAfter: adminBalAfter,
+            kotakBalanceAfter: kotakBalAfter,
+            retailerBalanceAfter: retailerBalAfter,
+            remarks,
+          }),
+        },
+      });
+
+      // 6. Broadcast Real-Time Events
+      if (transferDestination === 'retailer_wallet') {
+        broadcastEvent('WALLET_CREDITED', {
+          reference: tx.reference,
+          amount: numAmount,
+          userId: retailer.id,
+          bucket: 'main',
+        });
+      }
+      broadcastEvent('TRANSACTION_CREATED', {
+        reference: tx.reference,
+        amount: numAmount,
+        service: tx.serviceName,
+      });
+
+      return NextResponse.json({
+        success: true,
+        transaction: tx,
+        adminBalanceAfter: adminBalAfter,
+        retailerBalanceAfter: retailerBalAfter,
+        kotakBalanceAfter: kotakBalAfter,
+        message: `Successfully transferred ₹${numAmount.toLocaleString('en-IN')} to ${retailer.companyName || retailer.firstName} (${destName})! Ref: ${ref}, UTR: ${bankUtr}`,
       });
     }
 

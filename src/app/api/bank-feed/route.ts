@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const {
+      action,
       raw_sms,
       rawSms,
       smsText,
@@ -24,9 +25,40 @@ export async function POST(req: NextRequest) {
       utr: directUtr,
       amount: directAmount,
       availableBalance: directBalance,
+      balance: directSetBalance,
       bank_name,
       bankName,
     } = body;
+
+    // Handle Direct Manual Balance Sync / Set
+    if (action === 'set_balance' || directSetBalance !== undefined) {
+      const targetBal = parseFloat(String(directSetBalance ?? directBalance));
+      if (isNaN(targetBal) || targetBal < 0) {
+        return NextResponse.json({ error: 'Please provide a valid balance amount (>= 0).' }, { status: 400 });
+      }
+      const updated = updateLiveBankBalance({
+        bankName: bank_name || bankName || 'Kotak Mahindra Bank',
+        availableBalance: targetBal,
+        lastSmsText: `Manual sync by Admin: ₹${targetBal.toLocaleString('en-IN')}`,
+        updatedAt: new Date().toISOString(),
+      });
+
+      broadcastEvent('BANK_BALANCE_UPDATED', {
+        bankName: updated.bankName,
+        accountNumber: updated.accountNumber,
+        availableBalance: updated.availableBalance,
+        updatedAt: updated.updatedAt,
+      });
+
+      return NextResponse.json({
+        success: true,
+        balanceUpdated: true,
+        availableBalance: updated.availableBalance,
+        liveBankBalance: updated,
+        message: `Live ${updated.bankName} (A/c ${updated.accountNumber}) balance updated to ₹${updated.availableBalance.toLocaleString('en-IN')}`,
+      });
+    }
+
     const smsContent = raw_sms || rawSms || smsText || notification_text;
 
     let utr = directUtr ? String(directUtr).trim() : null;
@@ -35,6 +67,7 @@ export async function POST(req: NextRequest) {
       directBalance !== undefined && directBalance !== null ? parseFloat(String(directBalance)) : null;
     let parsedBankName = bank_name || bankName || 'Kotak Mahindra Bank';
     let parsedPayerName: string | undefined = undefined;
+    let txnType: 'credit' | 'debit' | 'balance_only' = 'balance_only';
 
     if (smsContent) {
       const parsed = parseBankSms(String(smsContent));
@@ -45,9 +78,10 @@ export async function POST(req: NextRequest) {
       }
       if (parsed.bankName) parsedBankName = parsed.bankName;
       if (parsed.payerName) parsedPayerName = parsed.payerName;
+      txnType = parsed.txnType;
     }
 
-    // Whenever an SMS contains Avl Bal / Available Balance, update the Live Kotak Bank Balance
+    // Whenever an SMS contains Avl Bal / Available Balance, update the Live Bank Balance
     let liveBankBalance = getLiveBankBalance();
     if (availableBalance !== null && !isNaN(availableBalance)) {
       liveBankBalance = updateLiveBankBalance({
@@ -66,14 +100,29 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    if (!utr && !amount && availableBalance !== null) {
+    // If it's a balance check SMS (no transaction amount, or explicit balance_only)
+    if (txnType === 'balance_only' || (!utr && !amount && availableBalance !== null)) {
       return NextResponse.json({
         success: true,
         matched: false,
         balanceUpdated: true,
-        availableBalance,
+        availableBalance: liveBankBalance.availableBalance,
         liveBankBalance,
-        message: `Live ${parsedBankName} Balance (A/c 9974366033) synced: ₹${availableBalance.toLocaleString('en-IN')}`,
+        message: `Live ${parsedBankName} Balance (A/c ${liveBankBalance.accountNumber}) synced: ₹${liveBankBalance.availableBalance.toLocaleString('en-IN')}`,
+      });
+    }
+
+    // If it's a debit SMS (e.g. payout went out of bank account)
+    if (txnType === 'debit') {
+      return NextResponse.json({
+        success: true,
+        matched: false,
+        txnType: 'debit',
+        amount,
+        utr,
+        availableBalance: liveBankBalance.availableBalance,
+        liveBankBalance,
+        message: `${parsedBankName} Debit Notification: ₹${amount?.toLocaleString('en-IN') || 0} deducted${utr ? ` (Ref: ${utr})` : ''}. Current Avl Bal: ₹${liveBankBalance.availableBalance.toLocaleString('en-IN')}`,
       });
     }
 
@@ -130,7 +179,7 @@ export async function POST(req: NextRequest) {
           autoApproved: false,
           status: 'BANK_MISMATCH',
           fundRequest: mismatched,
-          availableBalance,
+          availableBalance: liveBankBalance.availableBalance,
           liveBankBalance,
           message: `Amount mismatch detected! Expected ₹${matchingFundReq.amount}, but ${parsedBankName} reported ₹${amount}. Flagged for Admin Review.`,
         });
@@ -182,20 +231,15 @@ export async function POST(req: NextRequest) {
         bucket,
       });
 
-      const balSuffix =
-        availableBalance !== null
-          ? ` | Live Bank Avl Bal: ₹${availableBalance.toLocaleString('en-IN')}`
-          : '';
-
       return NextResponse.json({
         success: true,
         matched: true,
         autoApproved: true,
         status: 'APPROVED',
         fundRequest: approved,
-        availableBalance,
+        availableBalance: liveBankBalance.availableBalance,
         liveBankBalance,
-        message: `Fund Request #${approved.id} for ₹${finalAmount.toLocaleString('en-IN')} verified & credited to Main Wallet via ${parsedBankName}!${balSuffix}`,
+        message: `Fund Request #${approved.id} for ₹${finalAmount.toLocaleString('en-IN')} verified & credited to Main Wallet via ${parsedBankName}! Live Bank Avl Bal: ₹${liveBankBalance.availableBalance.toLocaleString('en-IN')}`,
       });
     }
 
@@ -248,37 +292,27 @@ export async function POST(req: NextRequest) {
           bankRrn: effectiveUtr,
         });
 
-        const balSuffix =
-          availableBalance !== null
-            ? ` | Live Bank Avl Bal: ₹${availableBalance.toLocaleString('en-IN')}`
-            : '';
-
         return NextResponse.json({
           success: true,
           matched: true,
           autoApproved: true,
           status: 'UPI_QR_SETTLED',
-          availableBalance,
+          availableBalance: liveBankBalance.availableBalance,
           liveBankBalance,
-          message: `Pending UPI QR (${pendingQr.reference}) for ₹${pendingQr.amount} auto-settled to Main Wallet via ${parsedBankName} (Ref ${effectiveUtr})!${balSuffix}`,
+          message: `Pending UPI QR (${pendingQr.reference}) for ₹${pendingQr.amount} auto-settled to Main Wallet via ${parsedBankName} (Ref ${effectiveUtr})! Live Bank Avl Bal: ₹${liveBankBalance.availableBalance.toLocaleString('en-IN')}`,
         });
       }
     }
-
-    const balSuffix =
-      availableBalance !== null
-        ? ` | Live Bank Avl Bal updated to ₹${availableBalance.toLocaleString('en-IN')}.`
-        : '';
 
     return NextResponse.json({
       success: true,
       matched: false,
       utr: effectiveUtr,
       amount,
-      availableBalance,
+      availableBalance: liveBankBalance.availableBalance,
       liveBankBalance,
       bank: parsedBankName,
-      message: `Parsed ${utr ? `UTR ${utr}` : 'notification'}${amount ? ` (₹${amount})` : ''} from ${parsedBankName} (no pending UTR request matched).${balSuffix}`,
+      message: `Parsed ${utr ? `UTR ${utr}` : 'notification'}${amount ? ` (₹${amount.toLocaleString('en-IN')})` : ''} from ${parsedBankName}. Live Bank Avl Bal: ₹${liveBankBalance.availableBalance.toLocaleString('en-IN')}`,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Failed processing bank / notification feed';

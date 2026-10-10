@@ -131,30 +131,69 @@ export default function AdminPaymentsTreasuryPage() {
       </div>
 
       {/* Bank SMS Matcher Bar */}
-      <form
-        onSubmit={handleBankSmsPaste}
-        className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xs flex flex-col sm:flex-row items-center gap-2.5"
-      >
-        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 shrink-0">
-          <Smartphone className="w-4 h-4 text-emerald-600" />
-          <span>Kotak SMS Matcher & Balance Sync:</span>
+      <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xs space-y-2.5">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-slate-500 font-semibold text-[11px]">Quick Samples:</span>
+          <button
+            type="button"
+            onClick={() =>
+              setSimulatedSms(
+                'Kotak Bank: INR 5,000.00 credited to A/c 9974366033 on 10-Oct-26. UPI:428199283712. Total Bal: INR 1,53,701.00.'
+              )
+            }
+            className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer text-[11px]"
+          >
+            Kotak Credit (₹5,000)
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setSimulatedSms(
+                'Kotak Bank: INR 2,500.00 debited from A/c 9974366033 on 10-Oct-26. Info: UPI/428199283712/Retailer. Avl Bal: INR 1,51,201.00.'
+              )
+            }
+            className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer text-[11px]"
+          >
+            Kotak Debit (₹2,500)
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setSimulatedSms(
+                'Dear Customer, balance for Kotak Bank A/c 9974366033 is Rs 1,48,701.00 as of 10-OCT-26.'
+              )
+            }
+            className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer text-[11px]"
+          >
+            Kotak Bal Inquiry (₹1,48,701)
+          </button>
         </div>
-        <input
-          type="text"
-          value={simulatedSms}
-          onChange={(e) => setSimulatedSms(e.target.value)}
-          placeholder="Paste Kotak SMS to auto-match UTR & extract Avl Bal Rs. ..."
-          className="flex-1 w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-300 rounded-xl"
-        />
-        <button
-          type="submit"
-          disabled={isProcessingSms || !simulatedSms}
-          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
+
+        <form
+          onSubmit={handleBankSmsPaste}
+          className="flex flex-col sm:flex-row items-center gap-2.5"
         >
-          <Send className="w-3.5 h-3.5" />
-          <span>{isProcessingSms ? 'Syncing...' : 'Match UTR & Sync Balance'}</span>
-        </button>
-      </form>
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 shrink-0">
+            <Smartphone className="w-4 h-4 text-emerald-600" />
+            <span>Kotak SMS Matcher:</span>
+          </div>
+          <input
+            type="text"
+            value={simulatedSms}
+            onChange={(e) => setSimulatedSms(e.target.value)}
+            placeholder="Paste Kotak SMS to auto-match UTR & extract Avl Bal Rs. ..."
+            className="flex-1 w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-300 rounded-xl"
+          />
+          <button
+            type="submit"
+            disabled={isProcessingSms || !simulatedSms}
+            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>{isProcessingSms ? 'Syncing...' : 'Match UTR & Sync Balance'}</span>
+          </button>
+        </form>
+      </div>
 
       {/* Fund Requests Queue */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden">

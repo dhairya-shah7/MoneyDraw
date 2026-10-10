@@ -3,10 +3,10 @@
   "accountNumber": "9974366033",
   "ifsc": "KKBK0002626",
   "upiId": "9974366033@kotak",
-  "accountHolder": "AGS",
-  "availableBalance": null,
-  "lastSmsText": "",
-  "lastUtr": null,
-  "lastTxnAmount": null,
-  "updatedAt": null
+  "accountHolder": "TEKCHANDJI CO",
+  "availableBalance": 148701.0,
+  "lastSmsText": "Kotak Bank: Total Bal: INR 1,48,701.00 in A/c 9974366033",
+  "lastUtr": "428199283712",
+  "lastTxnAmount": 2500.0,
+  "updatedAt": "2026-10-10T10:00:00.000Z"
 }
