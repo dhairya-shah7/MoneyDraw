@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { recordWalletMovement, transferBetweenBuckets, WalletBucket } from '@/lib/ledger';
 import { extractReceiptMetadata } from '@/lib/receipt-ocr';
 import { broadcastEvent } from '@/lib/sse-hub';
+import { requestCashfreePayout } from '@/lib/cashfree-payout';
 
 export async function GET(req: NextRequest) {
   try {
@@ -493,10 +494,29 @@ export async function POST(req: NextRequest) {
       const totalDebit = numAmt;
       const netAmount = numAmt - charge;
       const reference = `STL-${Date.now().toString().slice(-6)}`;
-      const ifscPrefix = String(acc.ifsc || 'KKBK').slice(0, 4).toUpperCase();
-      const bankRrn = isZeroFeeRail
-        ? `${ifscPrefix}H26281${Math.floor(100000 + Math.random() * 899999)}`
-        : `6274${Math.floor(10000000 + Math.random() * 89999999)}`;
+
+      // Execute real bank settlement via Cashfree Payout
+      const payoutRes = await requestCashfreePayout({
+        transferId: reference,
+        amount: netAmount,
+        transferMode: 'banktransfer',
+        beneficiaryDetails: {
+          name: acc.accountHolderName,
+          phone: user.mobile,
+          bankAccount: acc.accountNumber,
+          ifsc: acc.ifsc,
+        },
+        remarks: `MoneyDraw Settlement ${reference} to ${acc.bankName}`,
+      });
+
+      if (!payoutRes.success) {
+        return NextResponse.json(
+          { error: `Settlement Transfer Declined by Bank: ${payoutRes.message}` },
+          { status: 400 }
+        );
+      }
+
+      const bankRrn = payoutRes.utr || `CF${Date.now().toString().slice(-10)}`;
 
       await recordWalletMovement({
         userId: user.id,

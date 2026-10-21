@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { calculateTransactionQuote } from '@/lib/commission-engine';
 import { recordWalletMovement } from '@/lib/ledger';
 import { broadcastEvent } from '@/lib/sse-hub';
+import { requestCashfreePayout } from '@/lib/cashfree-payout';
 
 export async function GET(req: NextRequest) {
   try {
@@ -241,11 +242,40 @@ export async function POST(req: NextRequest) {
       };
       const prefix = prefixMap[serviceCode] || 'MD-TXN';
       const reference = `${prefix}-${Date.now().toString().slice(-6)}`;
-      const ifscPrefix = String(ifsc || 'KKBK').slice(0, 4).toUpperCase();
-      const bankRrn = isZeroFeeB2b
-        ? `${ifscPrefix}H26281${Math.floor(100000 + Math.random() * 899999)}`
-        : `6274${Math.floor(10000000 + Math.random() * 89999999)}`;
-      const providerTxnId = `PRV-${Math.random().toString(36).slice(2, 9).toUpperCase()}`;
+
+      let bankRrn = '';
+      let providerTxnId = '';
+
+      if (serviceCode === 'PAYOUT') {
+        // Real Bank-to-Bank IMPS/NEFT execution via Cashfree
+        const payoutRes = await requestCashfreePayout({
+          transferId: reference,
+          amount: numAmount,
+          transferMode: accountOrVpa.includes('@') ? 'upi' : 'banktransfer',
+          beneficiaryDetails: {
+            name: customerName || 'Beneficiary',
+            phone: customerMobile || user.mobile,
+            bankAccount: accountOrVpa,
+            ifsc: ifsc || 'KKBK0002626',
+            vpa: accountOrVpa.includes('@') ? accountOrVpa : undefined,
+          },
+          remarks: `MoneyDraw Payout ${reference}`,
+        });
+
+        if (!payoutRes.success) {
+          return NextResponse.json(
+            { error: `Bank Transfer Declined: ${payoutRes.message}` },
+            { status: 400 }
+          );
+        }
+
+        bankRrn = payoutRes.utr || `CF${Date.now().toString().slice(-10)}`;
+        providerTxnId = payoutRes.referenceId || `CF-REF-${Date.now().toString().slice(-6)}`;
+      } else {
+        const ifscPrefix = String(ifsc || 'KKBK').slice(0, 4).toUpperCase();
+        bankRrn = `${ifscPrefix}H26281${Date.now().toString().slice(-6)}`;
+        providerTxnId = `PRV-${Date.now().toString().slice(-7)}`;
+      }
 
       // 1. Wallet Movement:
       // - AEPS_CW & AEPS_AP: Credits AEPS Wallet

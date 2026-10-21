@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { recordWalletMovement, WalletBucket } from '@/lib/ledger';
 import { broadcastEvent } from '@/lib/sse-hub';
 import { getLiveBankBalance, updateLiveBankBalance } from '@/lib/live-bank-balance';
+import { requestCashfreePayout } from '@/lib/cashfree-payout';
 
 export async function GET(req: NextRequest) {
   try {
@@ -216,7 +217,7 @@ export async function POST(req: NextRequest) {
       }
 
       const ref = `ADM-TRF-${Date.now().toString().slice(-7)}`;
-      const bankUtr = `KKBKH${Date.now().toString().slice(-8)}`;
+      let bankUtr = `KKBKH${Date.now().toString().slice(-8)}`;
 
       let adminBalAfter = adminUser.wallet?.availableBalance || 0;
       let kotakBalAfter: number | null = null;
@@ -299,6 +300,32 @@ export async function POST(req: NextRequest) {
         destinationAccount = targetAcc.accountNumber || retailer.mobile;
         destinationBank = targetAcc.bankName || 'Retailer Settlement Bank';
         destinationIfsc = targetAcc.ifsc || 'KKBK0002626';
+
+        // Execute real bank payout to Retailer via Cashfree
+        const payoutRes = await requestCashfreePayout({
+          transferId: ref,
+          amount: numAmount,
+          transferMode: destinationAccount.includes('@') ? 'upi' : 'banktransfer',
+          beneficiaryDetails: {
+            name: `${retailer.firstName} ${retailer.lastName}`.trim(),
+            phone: retailer.mobile,
+            bankAccount: destinationAccount,
+            ifsc: destinationIfsc,
+            vpa: destinationAccount.includes('@') ? destinationAccount : undefined,
+          },
+          remarks: `MoneyDraw Admin Payout ${ref}`,
+        });
+
+        if (!payoutRes.success) {
+          return NextResponse.json(
+            { error: `Bank Transfer Declined by Cashfree: ${payoutRes.message}` },
+            { status: 400 }
+          );
+        }
+
+        if (payoutRes.utr) {
+          bankUtr = payoutRes.utr;
+        }
       }
 
       // 5. Create Auditable Transaction Record

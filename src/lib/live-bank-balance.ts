@@ -16,38 +16,41 @@ export interface LiveBankBalanceState {
 
 const BALANCE_FILE_PATH = path.join(process.cwd(), 'data', 'live_bank_balance.json');
 
-const DEFAULT_STATE: LiveBankBalanceState = {
-  bankName: 'Kotak Mahindra Bank',
-  accountNumber: '9974366033',
-  ifsc: 'KKBK0002626',
-  upiId: '9974366033@kotak',
-  accountHolder: 'TEKCHANDJI CO',
-  availableBalance: 148701.0,
-  lastSmsText: 'Kotak Bank: Total Bal: INR 1,48,701.00 in A/c 9974366033',
-  lastUtr: '428199283712',
-  lastTxnAmount: null,
-  updatedAt: new Date().toISOString(),
-};
+function getDefaultState(): LiveBankBalanceState {
+  return {
+    bankName: process.env.PRIMARY_BANK_NAME || 'Kotak Mahindra Bank',
+    accountNumber: process.env.PRIMARY_BANK_ACCOUNT || '9974366033',
+    ifsc: process.env.PRIMARY_BANK_IFSC || 'KKBK0002626',
+    upiId: process.env.PRIMARY_BANK_UPI || '9974366033@kotak',
+    accountHolder: process.env.PRIMARY_BANK_HOLDER || 'TEKCHANDJI CO',
+    availableBalance: 148701.0,
+    lastSmsText: 'Initialized from Treasury Configuration',
+    lastUtr: null,
+    lastTxnAmount: null,
+    updatedAt: new Date().toISOString(),
+  };
+}
 
 export function getLiveBankBalance(): LiveBankBalanceState {
+  const defaultState = getDefaultState();
   try {
     if (fs.existsSync(BALANCE_FILE_PATH)) {
       const raw = fs.readFileSync(BALANCE_FILE_PATH, 'utf-8');
       const parsed = JSON.parse(raw);
       return {
-        ...DEFAULT_STATE,
+        ...defaultState,
         ...parsed,
         availableBalance:
           typeof parsed.availableBalance === 'number' && !isNaN(parsed.availableBalance)
             ? parsed.availableBalance
-            : DEFAULT_STATE.availableBalance,
-        updatedAt: parsed.updatedAt || DEFAULT_STATE.updatedAt,
+            : defaultState.availableBalance,
+        updatedAt: parsed.updatedAt || defaultState.updatedAt,
       };
     }
   } catch {
     // Fallback to default state
   }
-  return DEFAULT_STATE;
+  return defaultState;
 }
 
 export function updateLiveBankBalance(partial: Partial<LiveBankBalanceState>): LiveBankBalanceState {
