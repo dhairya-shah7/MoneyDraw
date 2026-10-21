@@ -4,9 +4,9 @@
   "ifsc": "KKBK0002626",
   "upiId": "9974366033@kotak",
   "accountHolder": "TEKCHANDJI CO",
-  "availableBalance": 148701.0,
-  "lastSmsText": "Kotak Bank: Total Bal: INR 1,48,701.00 in A/c 9974366033",
+  "availableBalance": 165400,
+  "lastSmsText": "WhatsApp Bot (919718566655): Dear Customer, The Available Balance in your A/c ending 6033 is INR 1,65,400.00 as on 21-Oct-2026....",
   "lastUtr": "428199283712",
-  "lastTxnAmount": 2500.0,
-  "updatedAt": "2026-10-10T10:00:00.000Z"
+  "lastTxnAmount": 2500,
+  "updatedAt": "2026-10-21T14:41:10.386Z"
 }

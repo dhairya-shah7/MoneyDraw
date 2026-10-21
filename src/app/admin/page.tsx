@@ -24,6 +24,10 @@ import {
   ShieldCheck,
   Landmark,
   ArrowRightLeft,
+  MessageSquare,
+  Share2,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 
 export default function AdminDashboardPage() {
@@ -51,6 +55,13 @@ export default function AdminDashboardPage() {
   const [adminTpin, setAdminTpin] = useState<string>('1234');
   const [showTpin, setShowTpin] = useState<boolean>(false);
   const [isTransferring, setIsTransferring] = useState<boolean>(false);
+
+  // WhatsApp Banking & 1-Tap UPI Approvals
+  const [whatsAppText, setWhatsAppText] = useState<string>('');
+  const [isSyncingWhatsApp, setIsSyncingWhatsApp] = useState<boolean>(false);
+  const [whatsAppResult, setWhatsAppResult] = useState<any>(null);
+  const [payoutAlertData, setPayoutAlertData] = useState<any>(null);
+  const [showPayoutAlertModal, setShowPayoutAlertModal] = useState<boolean>(false);
 
   const loadAdminOverview = async () => {
     setLoading(true);
@@ -217,6 +228,64 @@ export default function AdminDashboardPage() {
       setSmsResult({ success: false, error: err?.message });
     } finally {
       setIsProcessingSms(false);
+    }
+  };
+
+  const handleWhatsAppSync = async (textToSync?: string) => {
+    const content = textToSync || whatsAppText;
+    if (!content) return;
+    setIsSyncingWhatsApp(true);
+    try {
+      const res = await fetch('/api/whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: content }),
+      });
+      const resData = await res.json();
+      setWhatsAppResult(resData);
+      if (resData.success && resData.availableBalance !== undefined) {
+        pushToast('WhatsApp Balance Synced', resData.message, 'success');
+        await loadAdminOverview();
+        await refreshUser();
+      } else {
+        pushToast('WhatsApp Message', resData.message || resData.error || 'Processed', 'info');
+      }
+    } catch (err: any) {
+      pushToast('WhatsApp Error', err?.message, 'warning');
+      setWhatsAppResult({ success: false, error: err?.message });
+    } finally {
+      setIsSyncingWhatsApp(false);
+    }
+  };
+
+  const handleGenerateWhatsAppAlert = async (retailerId?: string, customAmt?: number) => {
+    try {
+      const targetUser = retailers.find((r: any) => String(r.id) === String(retailerId || selectedRetailerId)) || retailers[0];
+      const amt = customAmt || Number(transferAmount || 5000);
+      const res = await fetch('/api/whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'generate_payout_alert',
+          orderId: `WD-${Date.now().toString().slice(-4)}`,
+          retailerName: `${targetUser?.firstName || 'Retailer'} ${targetUser?.lastName || ''}`.trim(),
+          retailerMobile: targetUser?.mobile || '9081047006',
+          amount: amt,
+          beneficiaryName: targetUser?.companyName || `${targetUser?.firstName || 'Retailer'} ${targetUser?.lastName || ''}`.trim(),
+          bankName: 'Kotak Mahindra Bank',
+          accountNumber: targetUser?.mobile || '9081047006',
+          ifsc: 'KKBK0002626',
+          upiId: `${targetUser?.mobile || '9081047006'}@kotak`,
+          mode: 'IMPS',
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPayoutAlertData(data);
+        setShowPayoutAlertModal(true);
+      }
+    } catch (err: any) {
+      pushToast('Error', err?.message, 'warning');
     }
   };
 
@@ -637,6 +706,146 @@ export default function AdminDashboardPage() {
         )}
       </div>
 
+      {/* WHATSAPP BANKING & 1-TAP PAYOUT DISPATCHER */}
+      <div className="bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-950 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 text-white shadow-md space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-900/50 pb-3">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <MessageSquare className="w-5 h-5" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-white">
+                  WhatsApp Banking Gateway & 1-Tap Approvals
+                </h2>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                  Live Kotak Bot: +91 97185 66655
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Fetch Kotak bank balance via WhatsApp & dispatch 1-Tap pre-filled UPI transfer cards to Admin
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <a
+              href="https://wa.me/919718566655?text=bal"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-sm"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Ask Kotak Bot for Bal</span>
+            </a>
+            <button
+              type="button"
+              onClick={() => handleGenerateWhatsAppAlert()}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 text-xs font-bold cursor-pointer transition-all"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>1-Tap Payout Card</span>
+            </button>
+          </div>
+        </div>
+
+        {/* WhatsApp Test Chips */}
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-slate-400 font-semibold text-[11px]">Kotak Bot Quick Sync Chips:</span>
+            <button
+              type="button"
+              onClick={() =>
+                handleWhatsAppSync(
+                  'Dear Customer, The Available Balance in your A/c ending 6033 is INR 1,48,701.00 as on 21-Oct-2026.'
+                )
+              }
+              className="px-2.5 py-1 rounded-lg bg-emerald-900/40 hover:bg-emerald-800/60 border border-emerald-700/50 text-emerald-200 font-semibold cursor-pointer text-[11px]"
+            >
+              Kotak Bal: ₹1,48,701.00
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                handleWhatsAppSync(
+                  'Total Bal: INR 2,15,450.00 in A/c 9974366033 as on 21-Oct-2026.'
+                )
+              }
+              className="px-2.5 py-1 rounded-lg bg-emerald-900/40 hover:bg-emerald-800/60 border border-emerald-700/50 text-emerald-200 font-semibold cursor-pointer text-[11px]"
+            >
+              Kotak Bal: ₹2,15,450.00
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                handleWhatsAppSync(
+                  'Total Bal: INR 5,00,000.00 in A/c 9974366033 as on 21-Oct-2026.'
+                )
+              }
+              className="px-2.5 py-1 rounded-lg bg-emerald-900/40 hover:bg-emerald-800/60 border border-emerald-700/50 text-emerald-200 font-semibold cursor-pointer text-[11px]"
+            >
+              Kotak Bal: ₹5,00,000.00
+            </button>
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleWhatsAppSync();
+            }}
+            className="flex flex-col sm:flex-row gap-2 pt-1"
+          >
+            <input
+              type="text"
+              value={whatsAppText}
+              onChange={(e) => setWhatsAppText(e.target.value)}
+              placeholder="Paste Kotak WhatsApp reply (e.g. 'The Available Balance in your A/c ending 6033 is INR ...')"
+              className="flex-1 px-3.5 py-2.5 bg-slate-900 border border-emerald-500/30 rounded-xl text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-emerald-500"
+            />
+            <button
+              type="submit"
+              disabled={isSyncingWhatsApp || !whatsAppText}
+              className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 shrink-0 cursor-pointer transition-all shadow-sm"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>{isSyncingWhatsApp ? 'Syncing...' : 'Sync Balance via WhatsApp'}</span>
+            </button>
+          </form>
+        </div>
+
+        {whatsAppResult && (
+          <div
+            className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
+              whatsAppResult.success
+                ? 'bg-emerald-900/40 border-emerald-500 text-emerald-200'
+                : 'bg-amber-900/40 border-amber-500 text-amber-200'
+            }`}
+          >
+            <div className="flex items-center gap-2 font-semibold">
+              {whatsAppResult.success ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              )}
+              <span>{whatsAppResult.message || whatsAppResult.error}</span>
+            </div>
+            <button
+              onClick={() => setWhatsAppResult(null)}
+              className="text-[11px] font-bold underline ml-3 cursor-pointer text-slate-300 hover:text-white"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800">
+          <span>Webhook endpoint for automated WhatsApp forwarders / bots:</span>
+          <code className="text-emerald-400 bg-slate-900 px-2 py-0.5 rounded border border-emerald-900 font-mono">
+            POST /api/whatsapp
+          </code>
+        </div>
+      </div>
+
       {/* Pending UTR Alert */}
       {pendingFunds.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -821,6 +1030,63 @@ export default function AdminDashboardPage() {
           pushToast('Updated', 'UTR status and wallet updated.', 'success');
         }}
       />
+
+      {/* WHATSAPP 1-TAP PAYOUT MODAL */}
+      {showPayoutAlertModal && payoutAlertData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 text-emerald-700">
+                <MessageSquare className="w-5 h-5" />
+                <h3 className="text-sm font-black text-slate-900">
+                  WhatsApp 1-Tap Payout Approval Card
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowPayoutAlertModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 space-y-3 font-mono text-xs text-slate-800 whitespace-pre-line select-all">
+              {payoutAlertData.text}
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Direct NPCI UPI Intent Link:
+              </div>
+              <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-200 text-xs font-mono break-all text-slate-700">
+                {payoutAlertData.upiDeepLink}
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
+              <a
+                href={payoutAlertData.whatsappShareUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Open & Send in WhatsApp</span>
+              </a>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(payoutAlertData.text);
+                  pushToast('Copied', 'WhatsApp message copied to clipboard!', 'success');
+                }}
+                className="w-full sm:w-auto py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all"
+              >
+                <Copy className="w-4 h-4" />
+                <span>Copy Text</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

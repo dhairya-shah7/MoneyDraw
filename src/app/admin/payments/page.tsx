@@ -10,6 +10,8 @@ import {
   Smartphone,
   Send,
   Building2,
+  MessageSquare,
+  ExternalLink,
 } from 'lucide-react';
 
 export default function AdminPaymentsTreasuryPage() {
@@ -21,6 +23,8 @@ export default function AdminPaymentsTreasuryPage() {
   const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
   const [simulatedSms, setSimulatedSms] = useState('');
   const [isProcessingSms, setIsProcessingSms] = useState(false);
+  const [whatsAppText, setWhatsAppText] = useState('');
+  const [isSyncingWhatsApp, setIsSyncingWhatsApp] = useState(false);
 
   const [adjustForm, setAdjustForm] = useState({
     targetUserId: '',
@@ -77,6 +81,32 @@ export default function AdminPaymentsTreasuryPage() {
       pushToast('Error', err.message, 'warning');
     } finally {
       setIsProcessingSms(false);
+    }
+  };
+
+  const handleWhatsAppSync = async (textToSync?: string) => {
+    const content = textToSync || whatsAppText;
+    if (!content) return;
+    setIsSyncingWhatsApp(true);
+    try {
+      const res = await fetch('/api/whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: content }),
+      });
+      const data = await res.json();
+      if (data.success && data.availableBalance !== undefined) {
+        pushToast('WhatsApp Balance Synced', data.message, 'success');
+        setWhatsAppText('');
+        await loadData();
+        await refreshUser();
+      } else {
+        pushToast('WhatsApp Message', data.message || data.error || 'Processed', 'info');
+      }
+    } catch (err: any) {
+      pushToast('Error', err.message, 'warning');
+    } finally {
+      setIsSyncingWhatsApp(false);
     }
   };
 
@@ -191,6 +221,79 @@ export default function AdminPaymentsTreasuryPage() {
           >
             <Send className="w-3.5 h-3.5" />
             <span>{isProcessingSms ? 'Syncing...' : 'Match UTR & Sync Balance'}</span>
+          </button>
+        </form>
+      </div>
+
+      {/* WhatsApp Banking Bar */}
+      <div className="bg-gradient-to-r from-emerald-950 to-slate-900 border border-emerald-500/30 rounded-2xl p-3.5 shadow-2xs space-y-2.5 text-white">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400">
+              <MessageSquare className="w-4 h-4" />
+            </span>
+            <span className="text-xs font-bold">Kotak WhatsApp Banking Bot (+91 97185 66655)</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <a
+              href="https://wa.me/919718566655?text=bal"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold"
+            >
+              <ExternalLink className="w-3 h-3" />
+              <span>Ask Kotak Bot for Bal</span>
+            </a>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-slate-400">Chips:</span>
+              <button
+                type="button"
+                onClick={() =>
+                  handleWhatsAppSync(
+                    'Dear Customer, The Available Balance in your A/c ending 6033 is INR 1,48,701.00 as on 21-Oct-2026.'
+                  )
+                }
+                className="px-2 py-0.5 rounded bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 text-[10px] font-bold border border-emerald-700 cursor-pointer"
+              >
+                ₹1,48,701
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  handleWhatsAppSync(
+                    'Total Bal: INR 2,15,450.00 in A/c 9974366033 as on 21-Oct-2026.'
+                  )
+                }
+                className="px-2 py-0.5 rounded bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 text-[10px] font-bold border border-emerald-700 cursor-pointer"
+              >
+                ₹2,15,450
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleWhatsAppSync();
+          }}
+          className="flex flex-col sm:flex-row items-center gap-2.5"
+        >
+          <input
+            type="text"
+            value={whatsAppText}
+            onChange={(e) => setWhatsAppText(e.target.value)}
+            placeholder="Paste Kotak WhatsApp reply to auto-sync Available Balance"
+            className="flex-1 w-full px-3 py-2 text-xs font-mono bg-slate-900 border border-emerald-500/30 rounded-xl text-white placeholder-slate-500"
+          />
+          <button
+            type="submit"
+            disabled={isSyncingWhatsApp || !whatsAppText}
+            className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 text-xs font-black flex items-center gap-1.5 shrink-0 cursor-pointer"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>{isSyncingWhatsApp ? 'Syncing...' : 'Sync via WhatsApp'}</span>
           </button>
         </form>
       </div>
