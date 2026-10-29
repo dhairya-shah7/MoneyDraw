@@ -99,6 +99,14 @@ export default function UserWalletPage() {
   const [confirmTpinError, setConfirmTpinError] = useState('');
   const [confirmingPayment, setConfirmingPayment] = useState(false);
 
+  // 6. Top-Up / Fund Request Modal State
+  const [topUpModalOpen, setTopUpModalOpen] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState('2000');
+  const [topUpMode, setTopUpMode] = useState<'UPI' | 'IMPS' | 'NEFT'>('UPI');
+  const [topUpUtr, setTopUpUtr] = useState('');
+  const [topUpNote, setTopUpNote] = useState('');
+  const [submittingTopUp, setSubmittingTopUp] = useState(false);
+
   // Active Payment / QR Modal State
   const [activePayRow, setActivePayRow] = useState<any | null>(null);
   const [quickPayAmount, setQuickPayAmount] = useState('');
@@ -142,6 +150,9 @@ export default function UserWalletPage() {
 
     // If TPIN is not entered yet in the form, prompt via the Confirmation Modal
     if (!tpinToUse) {
+      if (activePayRow) {
+        setActivePayRow(null);
+      }
       setTpinModalData({
         recipientName: holder,
         recipientDetail: `${inferredBank} • A/c ${accNo} • ${ifsc}`,
@@ -533,6 +544,59 @@ export default function UserWalletPage() {
     }
   };
 
+  const handleSubmitTopUpRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = Number(topUpAmount);
+    const cleanUtr = (topUpUtr || '').trim();
+    if (!amt || amt <= 0) {
+      pushToast('Invalid Amount', 'Please enter an amount greater than ₹0.', 'warning');
+      return;
+    }
+    if (!cleanUtr || cleanUtr.length < 6) {
+      pushToast('Missing UTR', 'Please enter a valid 12-digit UTR or Reference ID.', 'warning');
+      return;
+    }
+
+    setSubmittingTopUp(true);
+    try {
+      const companyBank = data?.companyBanks?.[0] || {
+        bankName: 'Kotak Mahindra Bank',
+        accountNumber: '9974366033',
+      };
+
+      const res = await fetch('/api/wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_fund_request',
+          mobile: user?.mobile,
+          amount: amt,
+          walletTarget: 'main',
+          method: topUpMode === 'UPI' ? 'upi' : 'bank',
+          transferMode: topUpMode,
+          companyBankName: companyBank.bankName,
+          companyBankAccount: companyBank.accountNumber,
+          paymentReference: cleanUtr,
+          note: topUpNote,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to submit fund request');
+
+      pushToast('Fund Request Submitted!', `Reference: ${cleanUtr}. Awaiting Admin Approval.`, 'success');
+      setTopUpAmount('2000');
+      setTopUpUtr('');
+      setTopUpNote('');
+      setTopUpModalOpen(false);
+      await loadWallet();
+    } catch (err: unknown) {
+      pushToast('Request Failed', err instanceof Error ? err.message : 'Error submitting request', 'warning');
+    } finally {
+      setSubmittingTopUp(false);
+    }
+  };
+
   const autoFillFromBeneficiary = (b: any) => {
     setBankHolderName(b.accountHolderName || '');
     setBankAccountNo(b.accountNumber || '');
@@ -546,19 +610,37 @@ export default function UserWalletPage() {
   const w = data?.wallet || user?.wallet;
   const beneficiaries: any[] = data?.beneficiaries || data?.settlementAccounts || [];
   const otherUsers = data?.otherUsers || [];
+  const fundRequests: any[] = data?.fundRequests || [];
+  const primaryBank = data?.companyBanks?.[0] || {
+    bankName: 'Kotak Mahindra Bank',
+    accountNumber: '9974366033',
+    ifsc: 'KKBK0002626',
+    accountHolderName: 'TEKCHANDJI CO',
+    upiId: '9974366033@kotak',
+  };
 
   return (
     <AppShell>
       <div className="space-y-5">
         {/* Wallet Balance Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase">
-              <span>Main Wallet Balance</span>
-              <Wallet className="w-4 h-4 text-blue-600" />
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase">
+                <span>Main Wallet Balance</span>
+                <Wallet className="w-4 h-4 text-blue-600" />
+              </div>
+              <div className="text-2xl font-black text-slate-900 mt-1.5">{formatINR(w?.availableBalance)}</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">Ready to Pay Any Bank or User</div>
             </div>
-            <div className="text-2xl font-black text-slate-900 mt-1.5">{formatINR(w?.availableBalance)}</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Credited by Admin • Ready to Pay Any Bank or User</div>
+            <button
+              type="button"
+              onClick={() => setTopUpModalOpen(true)}
+              className="mt-3 w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Top Up / Request Funds</span>
+            </button>
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs">
@@ -945,6 +1027,57 @@ export default function UserWalletPage() {
           )}
         </div>
 
+        {/* Top-Up Requests History Card */}
+        {fundRequests.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                  <Banknote className="w-4 h-4 text-emerald-600" />
+                  <span>Your Wallet Top-Up / Fund Requests</span>
+                </h3>
+                <p className="text-xs text-slate-500">Track status of bank transfers submitted for wallet credit</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTopUpModalOpen(true)}
+                className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>New Request</span>
+              </button>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {fundRequests.slice(0, 5).map((fr: any) => (
+                <div key={fr.id} className="p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div>
+                    <div className="font-bold text-slate-900 flex items-center gap-2">
+                      <span className="text-sm font-black">{formatINR(fr.amount)}</span>
+                      <span className="font-mono text-slate-500">({fr.transferMode || 'IMPS'})</span>
+                    </div>
+                    <div className="text-slate-500 text-[11px] mt-0.5">
+                      UTR: <span className="font-mono font-bold text-slate-700">{fr.paymentReference}</span> • {new Date(fr.createdAt).toLocaleDateString('en-IN')}
+                    </div>
+                  </div>
+                  <div>
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                        fr.status === 'approved'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : fr.status === 'rejected'
+                          ? 'bg-rose-100 text-rose-800'
+                          : 'bg-amber-100 text-amber-800 animate-pulse'
+                      }`}
+                    >
+                      {fr.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Move Earned Commission to Main Wallet */}
         {Number(w?.commissionBalance || 0) > 0 && (
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs flex flex-wrap items-end justify-between gap-4">
@@ -1252,7 +1385,7 @@ export default function UserWalletPage() {
 
         {/* TPIN Confirmation Modal */}
         {tpinModalOpen && tpinModalData && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[70] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
               <div className="p-5 bg-gradient-to-r from-slate-900 to-blue-950 text-white flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
@@ -1355,6 +1488,184 @@ export default function UserWalletPage() {
           transaction={receiptTx}
           onClose={() => setReceiptTx(null)}
         />
+
+        {/* Top-Up / Fund Request Modal */}
+        {topUpModalOpen && (
+          <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+              <div className="px-5 py-4 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300">
+                    <Wallet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black tracking-tight">Top Up Wallet / Request Funds</h3>
+                    <p className="text-[11px] text-slate-300">0% Gateway Fee direct Bank/UPI Deposit</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTopUpModalOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmitTopUpRequest} className="p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+                {/* Bank / QR Payment Box */}
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                  <div className="text-xs font-bold text-slate-600 flex items-center justify-between">
+                    <span>Deposit Funds to Primary Treasury Bank:</span>
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">0% Fee</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="p-2.5 rounded-xl bg-white border border-slate-200">
+                      <div className="text-[10px] text-slate-400 font-bold uppercase">Bank Name</div>
+                      <div className="font-black text-slate-900">{primaryBank.bankName}</div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-white border border-slate-200">
+                      <div className="text-[10px] text-slate-400 font-bold uppercase">Beneficiary</div>
+                      <div className="font-black text-slate-900 truncate">{primaryBank.accountHolderName}</div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-white border border-slate-200">
+                      <div className="text-[10px] text-slate-400 font-bold uppercase">Account Number</div>
+                      <div className="font-mono font-black text-blue-700 flex items-center justify-between">
+                        <span>{primaryBank.accountNumber}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(primaryBank.accountNumber);
+                            pushToast('Copied', primaryBank.accountNumber, 'info');
+                          }}
+                          className="hover:text-blue-900 cursor-pointer"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-white border border-slate-200">
+                      <div className="text-[10px] text-slate-400 font-bold uppercase">IFSC Code</div>
+                      <div className="font-mono font-black text-slate-900 flex items-center justify-between">
+                        <span>{primaryBank.ifsc}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(primaryBank.ifsc);
+                            pushToast('Copied IFSC', primaryBank.ifsc, 'info');
+                          }}
+                          className="hover:text-slate-600 cursor-pointer"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {primaryBank.upiId && (
+                    <div className="p-2.5 rounded-xl bg-blue-50/60 border border-blue-200 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="text-[10px] font-bold text-blue-700 uppercase block">Instant UPI ID</span>
+                        <span className="font-mono font-bold text-slate-900">{primaryBank.upiId}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(primaryBank.upiId);
+                          pushToast('Copied UPI', primaryBank.upiId, 'info');
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-[11px] font-bold cursor-pointer hover:bg-blue-700"
+                      >
+                        Copy UPI
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Form Inputs */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 mb-1">Deposit Amount (₹) *</label>
+                    <input
+                      type="number"
+                      required
+                      min={100}
+                      value={topUpAmount}
+                      onChange={(e) => setTopUpAmount(e.target.value)}
+                      placeholder="e.g. 5000"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs font-black text-slate-900 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 mb-1">Transfer Mode *</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['UPI', 'IMPS', 'NEFT'] as const).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setTopUpMode(m)}
+                          className={`py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                            topUpMode === m
+                              ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 mb-1">
+                      12-Digit Bank UTR / Reference ID *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={topUpUtr}
+                      onChange={(e) => setTopUpUtr(e.target.value)}
+                      placeholder="e.g. 429182749102"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs font-mono font-bold text-slate-900 bg-white"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1">Found in your banking/UPI payment confirmation SMS or receipt.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 mb-1">Remarks / Note (Optional)</label>
+                    <input
+                      type="text"
+                      value={topUpNote}
+                      onChange={(e) => setTopUpNote(e.target.value)}
+                      placeholder="e.g. Top up for store DMT payouts"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setTopUpModalOpen(false)}
+                    className="flex-1 py-2.5 px-4 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingTopUp || !topUpUtr}
+                    className="flex-1 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    {submittingTopUp ? 'Submitting...' : 'Submit Request'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </AppShell>
   );
