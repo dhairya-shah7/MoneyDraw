@@ -1,7 +1,8 @@
 /**
- * Cashfree Payouts Engine
+ * Cashfree Payouts Engine (v2 REST API)
  * Official API integration for direct Bank-to-Bank transfers (IMPS, NEFT, RTGS, UPI)
- * Supports both Sandbox (Test) and Production environments.
+ * Supports both Sandbox (Test/Gamma) and Production environments.
+ * Cashfree v2 Reference: https://docs.cashfree.com/reference/v2transfer
  */
 
 export interface CashfreeBeneficiary {
@@ -9,8 +10,8 @@ export interface CashfreeBeneficiary {
   name: string;
   email?: string;
   phone: string;
-  bankAccount: string;
-  ifsc: string;
+  bankAccount?: string;
+  ifsc?: string;
   address1?: string;
   vpa?: string;
 }
@@ -25,7 +26,7 @@ export interface CashfreeTransferRequest {
 
 export interface CashfreeTransferResponse {
   success: boolean;
-  status: 'SUCCESS' | 'PENDING' | 'FAILED' | 'REJECTED';
+  status: 'SUCCESS' | 'PENDING' | 'RECEIVED' | 'FAILED' | 'REJECTED';
   subCode: string;
   message: string;
   utr?: string;
@@ -35,68 +36,26 @@ export interface CashfreeTransferResponse {
   rawResponse?: any;
 }
 
-// In-memory token cache to avoid generating a new token on every transfer
-let cachedToken: { token: string; expiresAt: number } | null = null;
-
 function getBaseUrl(): string {
   const env = (process.env.CASHFREE_ENV || 'sandbox').toLowerCase().trim();
   return env === 'production'
-    ? 'https://payout-api.cashfree.com'
-    : 'https://payout-gamma.cashfree.com';
+    ? 'https://payout-api.cashfree.com/payout'
+    : 'https://payout-gamma.cashfree.com/payout';
 }
 
 function getCredentials() {
-  const clientId = process.env.CASHFREE_CLIENT_ID || '';
-  const clientSecret = process.env.CASHFREE_CLIENT_SECRET || '';
+  const clientId = (process.env.CASHFREE_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.CASHFREE_CLIENT_SECRET || '').trim();
   return { clientId, clientSecret, isConfigured: Boolean(clientId && clientSecret) };
 }
 
 /**
- * Generates or returns a valid cached Bearer authorization token from Cashfree.
- */
-export async function getCashfreeAuthToken(): Promise<string> {
-  const { clientId, clientSecret, isConfigured } = getCredentials();
-
-  if (!isConfigured) {
-    throw new Error('Cashfree credentials missing. Please set CASHFREE_CLIENT_ID and CASHFREE_CLIENT_SECRET in .env');
-  }
-
-  const now = Date.now();
-  if (cachedToken && cachedToken.expiresAt > now + 60000) {
-    return cachedToken.token;
-  }
-
-  const baseUrl = getBaseUrl();
-  const response = await fetch(`${baseUrl}/payout/v1/authorize`, {
-    method: 'POST',
-    headers: {
-      'X-Client-Id': clientId,
-      'X-Client-Secret': clientSecret,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  const data = await response.json();
-
-  if (data.status !== 'SUCCESS' || !data.data?.token) {
-    throw new Error(`Cashfree auth failed: ${data.message || data.subCode || 'Invalid credentials'}`);
-  }
-
-  const token = data.data.token;
-  // Tokens typically expire in 24 hours; cache for 23 hours
-  const expiry = now + (data.data.expiry ? data.data.expiry * 1000 : 23 * 3600 * 1000);
-  cachedToken = { token, expiresAt: expiry };
-
-  return token;
-}
-
-/**
- * Requests an instant, direct Bank-to-Bank IMPS/NEFT payout via Cashfree.
+ * Requests an instant, direct Bank-to-Bank IMPS/NEFT or UPI payout via Cashfree v2 API.
  */
 export async function requestCashfreePayout(
   request: CashfreeTransferRequest
 ): Promise<CashfreeTransferResponse> {
-  const { isConfigured } = getCredentials();
+  const { clientId, clientSecret, isConfigured } = getCredentials();
 
   // If credentials are not yet entered in .env, simulate sandbox response with clear notice
   if (!isConfigured) {
@@ -113,45 +72,47 @@ export async function requestCashfreePayout(
   }
 
   try {
-    const token = await getCashfreeAuthToken();
     const baseUrl = getBaseUrl();
-
     const isUpi = request.transferMode === 'upi' || Boolean(request.beneficiaryDetails.vpa);
     const beneDetails = request.beneficiaryDetails;
 
     const payload: Record<string, any> = {
-      transferId: request.transferId,
-      amount: request.amount.toFixed(2),
-      remarks: request.remarks || `MoneyDraw Payout ${request.transferId}`,
+      transfer_id: request.transferId,
+      transfer_amount: Number(request.amount.toFixed(2)),
+      transfer_currency: 'INR',
+      transfer_mode: isUpi ? 'upi' : 'banktransfer',
+      transfer_remarks: request.remarks || `MoneyDraw Payout ${request.transferId}`,
     };
 
     if (isUpi && beneDetails.vpa) {
-      payload.transferMode = 'upi';
-      payload.beneficiaryDetails = {
-        beneId: beneDetails.beneId || `BENE_${beneDetails.phone}`,
-        name: beneDetails.name,
-        email: beneDetails.email || 'support@moneydraw.in',
-        phone: beneDetails.phone,
-        vpa: beneDetails.vpa,
-        address1: beneDetails.address1 || 'Shop Counter',
+      payload.beneficiary_details = {
+        beneficiary_name: beneDetails.name || 'Merchant Partner',
+        beneficiary_phone: beneDetails.phone || '9999999999',
+        beneficiary_instrument_details: {
+          vpa: beneDetails.vpa.trim(),
+        },
       };
     } else {
-      payload.transferMode = 'banktransfer';
-      payload.beneficiaryDetails = {
-        beneId: beneDetails.beneId || `BENE_${beneDetails.phone}`,
-        name: beneDetails.name,
-        email: beneDetails.email || 'support@moneydraw.in',
-        phone: beneDetails.phone,
-        bankAccount: beneDetails.bankAccount,
-        ifsc: beneDetails.ifsc.toUpperCase(),
-        address1: beneDetails.address1 || 'Shop Counter',
+      payload.beneficiary_details = {
+        beneficiary_name: beneDetails.name || 'Merchant Partner',
+        beneficiary_phone: beneDetails.phone || '9999999999',
+        beneficiary_instrument_details: {
+          bank_account_number: (beneDetails.bankAccount || '').replace(/\s+/g, ''),
+          bank_ifsc: (beneDetails.ifsc || '').trim().toUpperCase(),
+        },
       };
     }
 
-    const res = await fetch(`${baseUrl}/payout/v1.2/requestTransfer`, {
+    if (beneDetails.email) {
+      payload.beneficiary_details.beneficiary_email = beneDetails.email;
+    }
+
+    const res = await fetch(`${baseUrl}/transfers`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
+        'x-client-id': clientId,
+        'x-client-secret': clientSecret,
+        'x-api-version': '2024-01-01',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -159,30 +120,33 @@ export async function requestCashfreePayout(
 
     const data = await res.json();
 
-    if (data.status === 'SUCCESS') {
+    // In Cashfree v2, success or in-progress states return RECEIVED, PENDING, or SUCCESS
+    const statusCode = (data.status || data.status_code || '').toUpperCase();
+
+    if (statusCode === 'SUCCESS') {
       return {
         success: true,
         status: 'SUCCESS',
         subCode: data.subCode || '200',
-        message: data.message || 'Transfer processed successfully',
-        utr: data.data?.utr,
-        referenceId: data.data?.referenceId,
+        message: data.status_description || data.message || 'Transfer processed successfully',
+        utr: data.utr || data.bank_reference || data.cf_transfer_id,
+        referenceId: data.cf_transfer_id || request.transferId,
         transferId: request.transferId,
-        amount: request.amount,
+        amount: Number(data.transfer_amount || request.amount),
         rawResponse: data,
       };
     }
 
-    if (data.status === 'PENDING') {
+    if (statusCode === 'RECEIVED' || statusCode === 'PENDING') {
       return {
         success: true,
-        status: 'PENDING',
+        status: statusCode as 'RECEIVED' | 'PENDING',
         subCode: data.subCode || '201',
-        message: data.message || 'Transfer initiated with bank, awaiting settlement',
-        utr: data.data?.utr,
-        referenceId: data.data?.referenceId,
+        message: data.status_description || data.message || 'Transfer accepted by bank switch, awaiting final settlement',
+        utr: data.utr || data.bank_reference || data.cf_transfer_id,
+        referenceId: data.cf_transfer_id || request.transferId,
         transferId: request.transferId,
-        amount: request.amount,
+        amount: Number(data.transfer_amount || request.amount),
         rawResponse: data,
       };
     }
@@ -190,8 +154,8 @@ export async function requestCashfreePayout(
     return {
       success: false,
       status: 'FAILED',
-      subCode: data.subCode || 'ERROR',
-      message: data.message || 'Cashfree bank transfer failed',
+      subCode: data.subCode || data.code || 'ERROR',
+      message: data.status_description || data.message || 'Cashfree bank transfer failed',
       transferId: request.transferId,
       amount: request.amount,
       rawResponse: data,
@@ -209,10 +173,10 @@ export async function requestCashfreePayout(
 }
 
 /**
- * Checks the real-time settlement status of an existing transfer from NPCI switch.
+ * Checks the real-time settlement status of an existing transfer from Cashfree v2.
  */
 export async function getCashfreeTransferStatus(transferId: string): Promise<CashfreeTransferResponse> {
-  const { isConfigured } = getCredentials();
+  const { clientId, clientSecret, isConfigured } = getCredentials();
 
   if (!isConfigured) {
     return {
@@ -226,27 +190,29 @@ export async function getCashfreeTransferStatus(transferId: string): Promise<Cas
   }
 
   try {
-    const token = await getCashfreeAuthToken();
     const baseUrl = getBaseUrl();
-
-    const res = await fetch(`${baseUrl}/payout/v1.2/getTransferStatus?transferId=${encodeURIComponent(transferId)}`, {
+    const res = await fetch(`${baseUrl}/transfers?transfer_id=${encodeURIComponent(transferId)}`, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${token}`,
+        'x-client-id': clientId,
+        'x-client-secret': clientSecret,
+        'x-api-version': '2024-01-01',
       },
     });
 
     const data = await res.json();
+    const statusCode = (data.status || data.status_code || '').toUpperCase();
+    const isSuccess = statusCode === 'SUCCESS' || statusCode === 'RECEIVED' || statusCode === 'PENDING';
 
     return {
-      success: data.status === 'SUCCESS',
-      status: data.data?.transfer?.status || data.status || 'UNKNOWN',
-      subCode: data.subCode,
-      message: data.message || 'Status query completed',
-      utr: data.data?.transfer?.utr,
-      referenceId: data.data?.transfer?.referenceId,
+      success: isSuccess,
+      status: (statusCode as any) || 'UNKNOWN',
+      subCode: data.subCode || data.code || '200',
+      message: data.status_description || data.message || 'Status query completed',
+      utr: data.utr || data.bank_reference || data.cf_transfer_id,
+      referenceId: data.cf_transfer_id || transferId,
       transferId,
-      amount: Number(data.data?.transfer?.amount || 0),
+      amount: Number(data.transfer_amount || 0),
       rawResponse: data,
     };
   } catch (err: any) {
