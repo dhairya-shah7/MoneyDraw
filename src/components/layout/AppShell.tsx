@@ -363,7 +363,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Header Bar */}
-        <header className="h-15 bg-white/95 backdrop-blur-xs border-b border-slate-200 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-30">
+        <header className="min-h-15 bg-white/95 backdrop-blur-xs border-b border-slate-200 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-30 pt-[env(safe-area-inset-top,0px)]">
           <div className="flex items-center gap-2 sm:gap-2.5">
             {/* Hamburger Button on Mobile */}
             <button
@@ -481,10 +481,10 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Main Content Area */}
-        <main className="p-3 sm:p-5 flex-1 max-w-[1400px] w-full mx-auto pb-20 md:pb-6">{children}</main>
+        <main className="p-3 sm:p-5 flex-1 max-w-[1400px] w-full mx-auto pb-24 md:pb-6">{children}</main>
 
         {/* Mobile Bottom Navigation Bar (md:hidden) */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 flex items-center justify-around shadow-lg">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 pt-1.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] flex items-center justify-around shadow-lg">
           {(isAdmin
             ? [
                 { label: 'Overview', href: '/admin', icon: LayoutDashboard },

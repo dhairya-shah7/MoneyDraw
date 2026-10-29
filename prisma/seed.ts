@@ -67,16 +67,16 @@ async function main() {
     },
   });
 
-  // 3. Users: Super Admin (dhairyaqwerty1@gmail.com), Staff, Distributor (AGS CORPORATION), Retailer (Gelot Mahendrakumar mangalji - 9081047006)
+  // 3. Users: Super Admin, Staff, Distributor, Retailer
   const superAdmin = await prisma.user.create({
     data: {
-      username: 'dhairyaqwerty1@gmail.com',
-      mobile: '9999999999',
-      email: 'dhairyaqwerty1@gmail.com',
-      passwordHash: 'MoneyPayAdmin@2026',
+      username: process.env.INITIAL_ADMIN_EMAIL || 'admin@hunarpay.com',
+      mobile: process.env.INITIAL_ADMIN_MOBILE || '9999999999',
+      email: process.env.INITIAL_ADMIN_EMAIL || 'admin@hunarpay.com',
+      passwordHash: process.env.INITIAL_ADMIN_PASSWORD || 'Admin@123',
       tpin: '1234',
-      firstName: 'Dhairya',
-      lastName: '(Super Admin)',
+      firstName: process.env.INITIAL_ADMIN_NAME || 'Super Admin',
+      lastName: '',
       roleCode: 'SUPER_ADMIN',
       roleName: 'Super Admin',
       companyName: 'MoneyDraw Direct Gateway',

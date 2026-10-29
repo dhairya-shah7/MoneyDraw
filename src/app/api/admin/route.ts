@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
         receivedAmount,
         disputeReason = '',
         reviewNote = '',
-        reviewerName = 'Dhairya (Super Admin)',
+        reviewerName = 'Super Admin',
       } = body;
       const targetId = Number(id || fundRequestId);
       const fundReq = await prisma.fundRequest.findUnique({ where: { id: targetId } });
@@ -825,8 +825,8 @@ export async function POST(req: NextRequest) {
           providerTxnId: `B2B-${transferMode}-${Date.now().toString().slice(-6)}`,
           bankRrn: finalUtr,
           userId: adminUser?.id || 1,
-          userMobile: adminUser?.mobile || 'dhairyaqwerty1@gmail.com',
-          userName: adminUser ? `${adminUser.firstName} ${adminUser.lastName}`.trim() : 'Dhairya Shah',
+          userMobile: adminUser?.mobile || 'Admin',
+          userName: adminUser ? `${adminUser.firstName} ${adminUser.lastName}`.trim() : 'Super Admin',
           serviceCode: 'PAYOUT',
           serviceName: `Direct Bank-to-Bank (${transferMode} • ₹0 Fee)`,
           category: 'payout',

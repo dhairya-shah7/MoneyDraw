@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-async function ensureDhairyaSuperAdmin() {
-  const email = 'dhairyaqwerty1@gmail.com';
+async function ensureSuperAdmin() {
+  const email = (process.env.INITIAL_ADMIN_EMAIL || 'admin@hunarpay.com').trim().toLowerCase();
+  const password = process.env.INITIAL_ADMIN_PASSWORD || 'Admin@123';
+  const adminName = process.env.INITIAL_ADMIN_NAME || 'Super Admin';
   const existing = await prisma.user.findFirst({
-    where: { OR: [{ email }, { username: email }, { mobile: '9999999999' }] },
+    where: { OR: [{ email }, { username: email }, { roleCode: 'SUPER_ADMIN' }] },
     include: { wallet: true },
   });
 
@@ -13,12 +15,12 @@ async function ensureDhairyaSuperAdmin() {
     await prisma.user.create({
       data: {
         username: email,
-        mobile: '9999999999',
+        mobile: process.env.INITIAL_ADMIN_MOBILE || '9999999999',
         email,
-        passwordHash: 'MoneyPayAdmin@2026',
+        passwordHash: password,
         tpin: '1234',
-        firstName: 'Dhairya',
-        lastName: '(Super Admin)',
+        firstName: adminName,
+        lastName: '',
         roleCode: 'SUPER_ADMIN',
         roleName: 'Super Admin',
         companyName: 'MoneyDraw Direct Gateway',
@@ -41,20 +43,12 @@ async function ensureDhairyaSuperAdmin() {
         },
       },
     });
-  } else if (existing.email !== email) {
-    await prisma.user.update({
-      where: { id: existing.id },
-      data: {
-        email,
-        username: email,
-      },
-    });
   }
 }
 
 export async function GET(req: NextRequest) {
   try {
-    await ensureDhairyaSuperAdmin();
+    await ensureSuperAdmin();
 
     const identifier = (req.nextUrl.searchParams.get('mobile') || '9081047006').trim();
     const user = await prisma.user.findFirst({
@@ -99,7 +93,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await ensureDhairyaSuperAdmin();
+    await ensureSuperAdmin();
 
     const body = await req.json();
     const { action } = body;
@@ -126,11 +120,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const isDhairyaAdmin =
-        user.email.toLowerCase() === 'dhairyaqwerty1@gmail.com' &&
-        (password === 'MoneyPayAdmin@2026' || password === 'Admin@123');
-
-      if (user.passwordHash !== password && !isDhairyaAdmin) {
+      if (user.passwordHash !== password) {
         return NextResponse.json(
           { error: 'Invalid password. Please check your credentials.' },
           { status: 401 }
@@ -190,10 +180,11 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const isSuperAdminEmail = email === 'dhairyaqwerty1@gmail.com';
+      const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || 'admin@hunarpay.com').trim().toLowerCase();
+      const isSuperAdminEmail = email === adminEmail;
       const parts = name.split(' ');
       const firstName = parts[0] || name;
-      const lastName = parts.slice(1).join(' ') || (isSuperAdminEmail ? '(Super Admin)' : '');
+      const lastName = parts.slice(1).join(' ') || (isSuperAdminEmail ? '(Admin)' : '');
       const scheme = await prisma.commissionScheme.findFirst();
 
       const newUser = await prisma.user.create({

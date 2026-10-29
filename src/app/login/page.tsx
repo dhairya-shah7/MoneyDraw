@@ -16,8 +16,8 @@ import { useApp } from '@/components/providers/AppContext';
 export default function LoginPage() {
   const router = useRouter();
   const { refreshUser, pushToast } = useApp();
-  const [username, setUsername] = useState('dhairyaqwerty1@gmail.com');
-  const [password, setPassword] = useState('MoneyPayAdmin@2026');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
