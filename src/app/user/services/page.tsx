@@ -992,10 +992,7 @@ function ServicesContent() {
                     <span className="text-emerald-700">+{formatINR(quote.walletCredit)}</span>
                   </div>
                 )}
-                <div className="flex justify-between py-1.5 px-2.5 rounded-lg bg-violet-50 font-bold">
-                  <span className="text-violet-800">Commission</span>
-                  <span className="text-violet-700">+{formatINR(quote.retailerNetComm)}</span>
-                </div>
+
               </div>
             ) : (
               <div className="text-xs text-slate-400 py-4 text-center">Loading quote...</div>

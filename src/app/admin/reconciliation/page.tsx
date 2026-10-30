@@ -93,80 +93,13 @@ export default function AdminReconciliationPage() {
         </div>
       </div>
 
-      {/* Interactive Commission Chain Auditor */}
-      {selectedTx && (
-        <div className="bg-white border-2 border-blue-200 rounded-2xl p-5 shadow-card space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-            <div>
-              <span className="text-[10px] font-bold uppercase text-blue-600">
-                Interactive Commission Waterfall Trace
-              </span>
-              <h2 className="text-sm font-extrabold text-slate-900">
-                Reference: <span className="font-mono">{selectedTx.reference}</span> • RRN:{' '}
-                <span className="font-mono">{selectedTx.bankRrn || 'N/A'}</span>
-              </h2>
-            </div>
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              3-Way Matched (Delta ₹0.00)
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-              <div className="text-[10px] font-bold uppercase text-slate-400">1. Customer Principal</div>
-              <div className="text-lg font-extrabold font-mono text-slate-900 mt-1">
-                {formatINR(selectedTx.amount)}
-              </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">
-                Service: {selectedTx.serviceName}
-              </div>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-200">
-              <div className="text-[10px] font-bold uppercase text-emerald-700">
-                2. Retailer Commission
-              </div>
-              <div className="text-lg font-extrabold font-mono text-emerald-700 mt-1">
-                +{formatINR(selectedTx.commission)}
-              </div>
-              <div className="text-[11px] text-emerald-600 font-mono mt-0.5">
-                TDS Deducted: {formatINR(selectedTx.tds)}
-              </div>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-blue-50/60 border border-blue-200">
-              <div className="text-[10px] font-bold uppercase text-blue-700">
-                3. Distributor Override (AGS Corp)
-              </div>
-              <div className="text-lg font-extrabold font-mono text-blue-700 mt-1">
-                +{formatINR(selectedTx.distributorComm)}
-              </div>
-              <div className="text-[11px] text-blue-600 mt-0.5">Auto-credited to Upline Wallet</div>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-purple-50/60 border border-purple-200">
-              <div className="text-[10px] font-bold uppercase text-purple-700">
-                4. MoneyDraw Net Margin
-              </div>
-              <div className="text-lg font-extrabold font-mono text-purple-700 mt-1">
-                +{formatINR(selectedTx.adminMargin)}
-              </div>
-              <div className="text-[11px] text-purple-600 mt-0.5">
-                Customer Surcharge: {formatINR(selectedTx.surcharge)} • GST: {formatINR(selectedTx.gst)}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Individual Transactions List */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-card overflow-hidden">
         <div className="p-4 border-b border-slate-200 flex items-center justify-between">
           <h2 className="text-sm font-bold text-slate-900">
             Transaction-Level Audit Log ({transactions.length})
           </h2>
-          <span className="text-xs text-slate-500">Click any row to inspect its Commission Waterfall</span>
+          <span className="text-xs text-slate-500">Live Double-Entry Verification</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -176,19 +109,16 @@ export default function AdminReconciliationPage() {
                 <th className="py-3 px-4">Ref ID / Time</th>
                 <th className="py-3 px-4">Service & Operator</th>
                 <th className="py-3 px-4 text-right">Amount</th>
-                <th className="py-3 px-4 text-right">Ret. Comm</th>
-                <th className="py-3 px-4 text-right">Dist. Comm</th>
-                <th className="py-3 px-4 text-right">Admin Margin</th>
+                <th className="py-3 px-4 text-right">Fee</th>
+                <th className="py-3 px-4">Bank RRN / UTR</th>
+                <th className="py-3 px-4 text-right">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
               {transactions.slice(0, 20).map((r) => (
                 <tr
                   key={r.id}
-                  onClick={() => setSelectedTx(r)}
-                  className={`cursor-pointer transition-colors ${
-                    selectedTx?.id === r.id ? 'bg-blue-50/70' : 'hover:bg-slate-50'
-                  }`}
+                  className="hover:bg-slate-50 transition-colors"
                 >
                   <td className="py-3 px-4">
                     <div className="font-mono font-bold text-slate-900">{r.reference}</div>
@@ -201,14 +131,16 @@ export default function AdminReconciliationPage() {
                   <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
                     {formatINR(r.amount)}
                   </td>
-                  <td className="py-3 px-4 text-right font-mono text-emerald-700">
-                    {formatINR(r.commission)}
+                  <td className="py-3 px-4 text-right font-mono text-emerald-700 font-bold">
+                    ₹0.00
                   </td>
-                  <td className="py-3 px-4 text-right font-mono text-blue-700">
-                    {formatINR(r.distributorComm)}
+                  <td className="py-3 px-4 font-mono text-[11px] text-slate-700">
+                    {r.bankRrn || 'N/A'}
                   </td>
-                  <td className="py-3 px-4 text-right font-mono font-bold text-purple-700">
-                    +{formatINR(r.adminMargin)}
+                  <td className="py-3 px-4 text-right">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      {r.status}
+                    </span>
                   </td>
                 </tr>
               ))}

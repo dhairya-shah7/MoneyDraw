@@ -109,7 +109,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     { label: 'Transfer to Retailers', href: '/admin/users', icon: Users },
     { label: 'Fund Requests & Wallet', href: '/admin/payments', icon: Wallet },
     { label: 'Bank & UPI Pool', href: '/admin/settings', icon: Settings },
-    { label: 'Commissions', href: '/admin/commissions', icon: Sliders },
     { label: 'Reconciliation', href: '/admin/reconciliation', icon: Scale },
   ];
 
@@ -138,7 +137,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         { title: 'Transfer to Retailers (Users)', sub: 'Give or deduct Retailer Main Wallet balance', href: '/admin/users' },
         { title: 'Fund Requests & Wallet', sub: 'Verify UTRs & Adjust Wallets', href: '/admin/payments' },
         { title: 'Bank & UPI Pool', sub: 'Receiving QRs & Bank-to-Bank Payouts', href: '/admin/settings' },
-        { title: 'Commissions', sub: 'Manage slabs & margins', href: '/admin/commissions' },
         { title: 'Reconciliation', sub: 'Ledger & audit', href: '/admin/reconciliation' },
       ]
     : isStaff

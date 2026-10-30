@@ -310,32 +310,26 @@ export async function POST(req: NextRequest) {
           transactionRef: reference,
           remarks: `${serviceName || serviceCode} - ${operatorName} (${accountOrVpa})`,
         });
-      }
 
-      // 2. Credit Retailer Commission Wallet
-      if (!isInquiryOnly && quote.retailerNetComm > 0) {
-        await recordWalletMovement({
-          userId: user.id,
-          bucket: 'commission',
-          direction: 'credit',
-          entryType: 'commission_credit',
-          amount: quote.retailerNetComm,
-          transactionRef: reference,
-          remarks: `Commission earned on ${reference}`,
-        });
-      }
-
-      // 3. Credit Upline Distributor Commission Wallet
-      if (!isInquiryOnly && user.parentId && quote.distributorComm > 0) {
-        await recordWalletMovement({
-          userId: user.parentId,
-          bucket: 'commission',
-          direction: 'credit',
-          entryType: 'commission_credit',
-          amount: quote.distributorComm,
-          transactionRef: reference,
-          remarks: `Distributor Override on ${reference} from ${user.mobile}`,
-        });
+        // Mirror Admin Treasury Outflow:
+        // Cashfree debits the Admin's bank float in real life; we debit Admin Treasury in the database to stay in sync.
+        if (serviceCode === 'PAYOUT') {
+          const adminUser = await prisma.user.findFirst({
+            where: { roleCode: 'SUPER_ADMIN' },
+            include: { wallet: true },
+          });
+          if (adminUser && adminUser.id !== user.id) {
+            await recordWalletMovement({
+              userId: adminUser.id,
+              bucket: 'main',
+              direction: 'debit',
+              entryType: 'transaction_debit',
+              amount: quote.totalDebit,
+              transactionRef: reference,
+              remarks: `Cashfree Payout Outflow for Retailer ${user.firstName || ''} (${user.mobile}) to ${customerName || 'Beneficiary'} (UTR: ${bankRrn})`,
+            });
+          }
+        }
       }
 
       // Mini Statement Passbook Data for AEPS_MS / AEPS_BE

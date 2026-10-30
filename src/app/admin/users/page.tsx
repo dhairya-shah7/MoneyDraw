@@ -220,9 +220,6 @@ export default function AdminUsersManagementPage() {
                     <div className="font-mono text-sm font-black text-emerald-700">
                       {formatINR(u.wallet?.availableBalance || 0)}
                     </div>
-                    <div className="text-[10px] font-mono text-slate-400">
-                      Comm: {formatINR(u.wallet?.commissionBalance || 0)}
-                    </div>
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex flex-wrap items-center gap-1.5">

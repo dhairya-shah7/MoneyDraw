@@ -164,14 +164,10 @@ export default function ReportsPage() {
       </div>
 
       {/* Summary KPI Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
           <div className="text-xs font-semibold text-slate-500">Settled Volume</div>
           <div className="text-2xl font-extrabold text-slate-900 font-mono mt-1">{formatINR(totalVolume)}</div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
-          <div className="text-xs font-semibold text-slate-500">Commission Earned</div>
-          <div className="text-2xl font-extrabold text-emerald-600 font-mono mt-1">+{formatINR(totalComm)}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
           <div className="text-xs font-semibold text-slate-500">Main Wallet Balance</div>
@@ -241,8 +237,8 @@ export default function ReportsPage() {
                   <th className="py-3.5 px-4">Service & Operator</th>
                   <th className="py-3.5 px-4">Customer / Account</th>
                   <th className="py-3.5 px-4 text-right">Amount</th>
-                  <th className="py-3.5 px-4 text-right">Comm / Surcharge</th>
-                  <th className="py-3.5 px-4 text-right">Net Impact</th>
+                  <th className="py-3.5 px-4 text-right">Extra Charges</th>
+                  <th className="py-3.5 px-4 text-right">Net Debit</th>
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-4 text-right">Receipt</th>
                 </tr>
@@ -284,16 +280,8 @@ export default function ReportsPage() {
                       <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
                         {formatINR(tx.amount)}
                       </td>
-                      <td className="py-3 px-4 text-right font-mono">
-                        {tx.commission > 0 && (
-                          <div className="text-emerald-600 font-semibold">+{formatINR(tx.commission)}</div>
-                        )}
-                        {tx.surcharge > 0 && (
-                          <div className="text-amber-600 font-semibold">-{formatINR(tx.surcharge)} Fee</div>
-                        )}
-                        {tx.tds > 0 && (
-                          <div className="text-[10px] text-slate-400">TDS: {formatINR(tx.tds)}</div>
-                        )}
+                      <td className="py-3 px-4 text-right font-mono text-emerald-700 font-bold">
+                        ₹0.00
                       </td>
                       <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">
                         {formatINR(tx.totalDebit)}

@@ -51,16 +51,6 @@ export function ReceiptModal({
     if (typeof window !== 'undefined') window.print();
   };
 
-  const handleWhatsAppShare = () => {
-    if (!transaction) return;
-    const text = `*MoneyDraw Official Receipt*\nRef: ${transaction.reference}\nService: ${transaction.serviceName}\nAmount: ${formatINR(
-      transaction.amount
-    )}\nStatus: ${transaction.status.toUpperCase()}\nBank RRN: ${transaction.bankRrn || 'N/A'}\nDate: ${formatDateTime(
-      transaction.createdAt || new Date()
-    )}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 overflow-y-auto">
       <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
@@ -97,15 +87,6 @@ export function ReceiptModal({
           </div>
 
           <div className="flex items-center gap-2">
-            {transaction && (
-              <button
-                onClick={handleWhatsAppShare}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100"
-              >
-                <Share2 className="w-3.5 h-3.5" />
-                WhatsApp
-              </button>
-            )}
             <button
               onClick={handlePrint}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700"

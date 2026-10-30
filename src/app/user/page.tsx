@@ -118,25 +118,26 @@ export default function UserDashboardPage() {
           </div>
         </div>
 
-        {/* KPI Cards (No AEPS Card) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* KPI Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 uppercase">Main Wallet</span>
+                <span className="text-xs font-bold text-slate-500 uppercase">Main Wallet (Float)</span>
                 <Wallet className="w-4 h-4 text-blue-600" />
               </div>
-              <div className="text-2xl font-black text-slate-900 mt-2">{formatINR(mainBalance)}</div>
+              <div className="text-3xl font-black text-slate-900 mt-2">{formatINR(mainBalance)}</div>
+              <div className="text-xs text-slate-400 mt-1">Available to disburse to any bank account (0% fee)</div>
             </div>
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
               <Link
                 href="/user/wallet"
                 className="text-xs font-bold text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
               >
-                Pay Any Bank / User <ArrowUpRight className="w-3.5 h-3.5" />
+                Pay Any Bank / Beneficiary <ArrowUpRight className="w-3.5 h-3.5" />
               </Link>
               <Link href="/user/wallet" className="text-xs font-bold text-emerald-700 hover:underline">
-                Saved Beneficiaries →
+                Top Up / Request Funds →
               </Link>
             </div>
           </div>
@@ -144,35 +145,15 @@ export default function UserDashboardPage() {
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-violet-700 uppercase">Commission Wallet</span>
-                <TrendingUp className="w-4 h-4 text-violet-600" />
-              </div>
-              <div className="text-2xl font-black text-violet-700 mt-2">{formatINR(commBalance)}</div>
-            </div>
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-              <Link
-                href="/user/wallet"
-                className="text-xs font-bold text-violet-600 hover:text-violet-800 inline-flex items-center gap-1"
-              >
-                Transfer to Main <ArrowLeftRight className="w-3.5 h-3.5" />
-              </Link>
-              <Link href="/user/downline" className="text-xs font-semibold text-slate-500 hover:text-slate-800">
-                Slabs
-              </Link>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 uppercase">Total Volume</span>
+                <span className="text-xs font-bold text-slate-500 uppercase">Total Disbursed Volume</span>
                 <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-bold text-[10px] border border-emerald-200">
                   Active
                 </span>
               </div>
-              <div className="text-2xl font-black text-slate-900 mt-2">
+              <div className="text-3xl font-black text-slate-900 mt-2">
                 {formatINR(data?.totals?.totalAmount ?? 0)}
               </div>
+              <div className="text-xs text-slate-400 mt-1">Processed transactions</div>
             </div>
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
               <Link href="/user/reports" className="text-xs font-bold text-blue-600 hover:text-blue-800">

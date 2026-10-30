@@ -291,8 +291,7 @@ export default function AdminPaymentsTreasuryPage() {
               onChange={(e) => setAdjustForm({ ...adjustForm, bucket: e.target.value })}
               className="w-full px-3 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl"
             >
-              <option value="main">Main Wallet</option>
-              <option value="commission">Commission Wallet</option>
+              <option value="main">Main Wallet (Float)</option>
             </select>
           </div>
           <div>
