@@ -6,10 +6,8 @@ import { ReceiptModal } from '@/components/shared/ReceiptModal';
 import {
   KeyRound,
   Lock,
-  Webhook,
   Award,
   Printer,
-  Copy,
 } from 'lucide-react';
 
 export default function AccountSecurityPage() {
@@ -18,8 +16,6 @@ export default function AccountSecurityPage() {
   const [confirmTpin, setConfirmTpin] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [webhookUrl, setWebhookUrl] = useState(user?.webhookUrl || 'https://erp.shreekrishnaagro.in/webhooks/moneydraw');
-  const [allowedIp, setAllowedIp] = useState(user?.allowedIp || '103.21.58.192, 49.36.128.10');
   const [saving, setSaving] = useState(false);
   const [showCertModal, setShowCertModal] = useState(false);
 
@@ -86,31 +82,6 @@ export default function AccountSecurityPage() {
       setCurrentPassword('');
       setNewPassword('');
       pushToast('Password Updated', 'Account login password changed.', 'success');
-    } catch (err: any) {
-      pushToast('Error', err.message, 'warning');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleUpdateApiConfig = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'update_api_settings',
-          userId: user.id,
-          webhookUrl,
-          allowedIp,
-          rotateKey: true,
-        }),
-      });
-      if (!res.ok) throw new Error('Failed to update developer settings');
-      await refreshUser();
-      pushToast('API Config Saved', 'Developer API Key rotated & Webhook saved.', 'success');
     } catch (err: any) {
       pushToast('Error', err.message, 'warning');
     } finally {
@@ -243,78 +214,6 @@ export default function AccountSecurityPage() {
           </button>
         </form>
       </div>
-
-      {/* Partner Developer API & Webhook Config */}
-      <form onSubmit={handleUpdateApiConfig} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-card space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-              <Webhook className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-900">Partner Developer API & Webhook Callbacks</h2>
-              <p className="text-xs text-slate-500">
-                Server-to-server payout & UPI QR collection callbacks with HMAC signature verification
-              </p>
-            </div>
-          </div>
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            Production Live
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Secret API Token</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                readOnly
-                value={user.apiKey || 'md_live_9081047006_sk_89a1bc4f'}
-                className="w-full px-3 py-2 text-xs font-mono bg-slate-100 border border-slate-200 rounded-xl text-slate-700"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(user.apiKey || 'md_live_9081047006_sk_89a1bc4f');
-                  pushToast('Copied', 'API Token copied to clipboard', 'info');
-                }}
-                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
-              >
-                <Copy className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Webhook Callback URL</label>
-            <input
-              type="url"
-              value={webhookUrl}
-              onChange={(e) => setWebhookUrl(e.target.value)}
-              className="w-full px-3.5 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-xl"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Whitelisted Server IPs</label>
-            <input
-              type="text"
-              value={allowedIp}
-              onChange={(e) => setAllowedIp(e.target.value)}
-              className="w-full px-3.5 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-xl"
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={saving}
-            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold cursor-pointer"
-          >
-            Rotate Key & Save Webhook Config
-          </button>
-        </div>
-      </form>
 
       <ReceiptModal
         open={showCertModal}

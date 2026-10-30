@@ -495,10 +495,6 @@ export default function UserWalletPage() {
   };
 
   const handleDeleteBeneficiary = async (benId: any) => {
-    if (typeof benId === 'string' && benId.startsWith('stl_')) {
-      pushToast('Primary Account', 'Settlement bank account cannot be deleted.', 'info');
-      return;
-    }
     try {
       const res = await fetch('/api/wallet', {
         method: 'POST',
@@ -608,7 +604,7 @@ export default function UserWalletPage() {
   };
 
   const w = data?.wallet || user?.wallet;
-  const beneficiaries: any[] = data?.beneficiaries || data?.settlementAccounts || [];
+  const beneficiaries: any[] = data?.beneficiaries || [];
   const otherUsers = data?.otherUsers || [];
   const fundRequests: any[] = data?.fundRequests || [];
   const primaryBank = data?.companyBanks?.[0] || {

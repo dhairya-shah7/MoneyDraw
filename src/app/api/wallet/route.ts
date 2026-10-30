@@ -140,7 +140,7 @@ export async function GET(req: NextRequest) {
     });
     const payoutBeneficiaries = remitters.flatMap((r) => r.beneficiaries);
 
-    // Merge payout beneficiaries and settlement accounts, deduplicating by accountNumber + ifsc
+    // Customer payout beneficiaries, deduplicating by accountNumber + ifsc
     const seenAccs = new Set<string>();
     const allBeneficiaries: any[] = [];
 
@@ -156,22 +156,6 @@ export async function GET(req: NextRequest) {
           ifsc: b.ifsc,
           verified: b.verified,
           type: 'payout',
-        });
-      }
-    }
-
-    for (const s of user.settlementAccounts) {
-      const key = `${s.accountNumber.trim()}_${s.ifsc.trim().toUpperCase()}`;
-      if (!seenAccs.has(key)) {
-        seenAccs.add(key);
-        allBeneficiaries.push({
-          id: `stl_${s.id}`,
-          accountHolderName: s.accountHolderName,
-          bankName: s.bankName,
-          accountNumber: s.accountNumber,
-          ifsc: s.ifsc,
-          verified: s.verificationStatus === 'verified',
-          type: 'settlement',
         });
       }
     }

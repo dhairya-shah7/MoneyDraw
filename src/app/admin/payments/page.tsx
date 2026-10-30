@@ -7,24 +7,18 @@ import { formatINR, formatDateTime } from '@/lib/format';
 import {
   ArrowUpDown,
   Eye,
-  Smartphone,
-  Send,
+  CheckCircle2,
+  XCircle,
   Building2,
-  MessageSquare,
-  ExternalLink,
 } from 'lucide-react';
 
 export default function AdminPaymentsTreasuryPage() {
   const { refreshUser, pushToast } = useApp();
   const [fundRequests, setFundRequests] = useState<any[]>([]);
   const [companyBanks, setCompanyBanks] = useState<any[]>([]);
-  const [liveBankBalance, setLiveBankBalance] = useState<any>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
-  const [simulatedSms, setSimulatedSms] = useState('');
-  const [isProcessingSms, setIsProcessingSms] = useState(false);
-  const [whatsAppText, setWhatsAppText] = useState('');
-  const [isSyncingWhatsApp, setIsSyncingWhatsApp] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
 
   const [adjustForm, setAdjustForm] = useState({
     targetUserId: '',
@@ -40,7 +34,6 @@ export default function AdminPaymentsTreasuryPage() {
       const data = await res.json();
       setFundRequests(data.fundRequests || []);
       setCompanyBanks(data.companyBanks || []);
-      setLiveBankBalance(data.liveBankBalance || null);
       setUsers(data.users || []);
       if (!adjustForm.targetUserId && data.users?.length > 0) {
         const defaultRetailer =
@@ -56,57 +49,35 @@ export default function AdminPaymentsTreasuryPage() {
     loadData();
   }, []);
 
-  const handleBankSmsPaste = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!simulatedSms) return;
-    setIsProcessingSms(true);
+  const handleQuickDecision = async (id: number, decision: 'approved' | 'rejected', amount: number) => {
+    setActionLoadingId(id);
     try {
-      const res = await fetch('/api/bank-feed', {
+      const res = await fetch('/api/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_sms: simulatedSms }),
+        body: JSON.stringify({
+          action: 'review_fund_request',
+          id,
+          decision,
+          receivedAmount: amount,
+          adminNote: `1-Click ${decision.toUpperCase()} from Admin Console`,
+        }),
       });
       const data = await res.json();
-      if (data.autoApproved) {
-        pushToast('Auto-Approved', data.message, 'success');
-      } else if (data.balanceUpdated || data.availableBalance !== null) {
-        pushToast('Balance Synced', data.message || 'Live bank balance updated', 'success');
-      } else {
-        pushToast('Parsed', data.message || 'Processed', 'info');
-      }
-      setSimulatedSms('');
+      if (!res.ok) throw new Error(data.error || 'Failed to update request');
+      pushToast(
+        decision === 'approved' ? 'Request Approved' : 'Request Rejected',
+        decision === 'approved'
+          ? `Successfully credited ${formatINR(amount)} to retailer Main Wallet.`
+          : 'Fund request has been marked as rejected.',
+        decision === 'approved' ? 'success' : 'info'
+      );
       await loadData();
       await refreshUser();
     } catch (err: any) {
-      pushToast('Error', err.message, 'warning');
+      pushToast('Action Failed', err.message || 'Error updating request', 'warning');
     } finally {
-      setIsProcessingSms(false);
-    }
-  };
-
-  const handleWhatsAppSync = async (textToSync?: string) => {
-    const content = textToSync || whatsAppText;
-    if (!content) return;
-    setIsSyncingWhatsApp(true);
-    try {
-      const res = await fetch('/api/whatsapp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: content }),
-      });
-      const data = await res.json();
-      if (data.success && data.availableBalance !== undefined) {
-        pushToast('WhatsApp Balance Synced', data.message, 'success');
-        setWhatsAppText('');
-        await loadData();
-        await refreshUser();
-      } else {
-        pushToast('WhatsApp Message', data.message || data.error || 'Processed', 'info');
-      }
-    } catch (err: any) {
-      pushToast('Error', err.message, 'warning');
-    } finally {
-      setIsSyncingWhatsApp(false);
+      setActionLoadingId(null);
     }
   };
 
@@ -146,156 +117,8 @@ export default function AdminPaymentsTreasuryPage() {
       <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-black text-slate-900">Fund Requests & Wallet Adjustments</h1>
-          <p className="text-xs text-slate-500">Verify merchant UTRs, sync live Kotak Bank balance, and manage wallets</p>
+          <p className="text-xs text-slate-500">Approve or reject retailer deposit requests & manage main wallet balances</p>
         </div>
-        {liveBankBalance?.availableBalance !== null && liveBankBalance?.availableBalance !== undefined && (
-          <div className="px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-right">
-            <div className="text-[10px] font-bold uppercase text-emerald-700">
-              Kotak A/c 9974366033 Live Avl Bal
-            </div>
-            <div className="text-base font-black font-mono text-emerald-900">
-              {formatINR(liveBankBalance.availableBalance)}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Bank SMS Matcher Bar */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-2xs space-y-2.5">
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-slate-500 font-semibold text-[11px]">Quick Samples:</span>
-          <button
-            type="button"
-            onClick={() =>
-              setSimulatedSms(
-                'Kotak Bank: INR 5,000.00 credited to A/c 9974366033 on 10-Oct-26. UPI:428199283712. Total Bal: INR 1,53,701.00.'
-              )
-            }
-            className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer text-[11px]"
-          >
-            Kotak Credit (₹5,000)
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              setSimulatedSms(
-                'Kotak Bank: INR 2,500.00 debited from A/c 9974366033 on 10-Oct-26. Info: UPI/428199283712/Retailer. Avl Bal: INR 1,51,201.00.'
-              )
-            }
-            className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer text-[11px]"
-          >
-            Kotak Debit (₹2,500)
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              setSimulatedSms(
-                'Dear Customer, balance for Kotak Bank A/c 9974366033 is Rs 1,48,701.00 as of 10-OCT-26.'
-              )
-            }
-            className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer text-[11px]"
-          >
-            Kotak Bal Inquiry (₹1,48,701)
-          </button>
-        </div>
-
-        <form
-          onSubmit={handleBankSmsPaste}
-          className="flex flex-col sm:flex-row items-center gap-2.5"
-        >
-          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 shrink-0">
-            <Smartphone className="w-4 h-4 text-emerald-600" />
-            <span>Kotak SMS Matcher:</span>
-          </div>
-          <input
-            type="text"
-            value={simulatedSms}
-            onChange={(e) => setSimulatedSms(e.target.value)}
-            placeholder="Paste Kotak SMS to auto-match UTR & extract Avl Bal Rs. ..."
-            className="flex-1 w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-300 rounded-xl"
-          />
-          <button
-            type="submit"
-            disabled={isProcessingSms || !simulatedSms}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span>{isProcessingSms ? 'Syncing...' : 'Match UTR & Sync Balance'}</span>
-          </button>
-        </form>
-      </div>
-
-      {/* WhatsApp Banking Bar */}
-      <div className="bg-gradient-to-r from-emerald-950 to-slate-900 border border-emerald-500/30 rounded-2xl p-3.5 shadow-2xs space-y-2.5 text-white">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400">
-              <MessageSquare className="w-4 h-4" />
-            </span>
-            <span className="text-xs font-bold">Kotak WhatsApp Banking Bot (+91 97185 66655)</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <a
-              href="https://wa.me/919718566655?text=bal"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold"
-            >
-              <ExternalLink className="w-3 h-3" />
-              <span>Ask Kotak Bot for Bal</span>
-            </a>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-slate-400">Chips:</span>
-              <button
-                type="button"
-                onClick={() =>
-                  handleWhatsAppSync(
-                    'Dear Customer, The Available Balance in your A/c ending 6033 is INR 1,48,701.00 as on 21-Oct-2026.'
-                  )
-                }
-                className="px-2 py-0.5 rounded bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 text-[10px] font-bold border border-emerald-700 cursor-pointer"
-              >
-                ₹1,48,701
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  handleWhatsAppSync(
-                    'Total Bal: INR 2,15,450.00 in A/c 9974366033 as on 21-Oct-2026.'
-                  )
-                }
-                className="px-2 py-0.5 rounded bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 text-[10px] font-bold border border-emerald-700 cursor-pointer"
-              >
-                ₹2,15,450
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleWhatsAppSync();
-          }}
-          className="flex flex-col sm:flex-row items-center gap-2.5"
-        >
-          <input
-            type="text"
-            value={whatsAppText}
-            onChange={(e) => setWhatsAppText(e.target.value)}
-            placeholder="Paste Kotak WhatsApp reply to auto-sync Available Balance"
-            className="flex-1 w-full px-3 py-2 text-xs font-mono bg-slate-900 border border-emerald-500/30 rounded-xl text-white placeholder-slate-500"
-          />
-          <button
-            type="submit"
-            disabled={isSyncingWhatsApp || !whatsAppText}
-            className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 text-xs font-black flex items-center gap-1.5 shrink-0 cursor-pointer"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span>{isSyncingWhatsApp ? 'Syncing...' : 'Sync via WhatsApp'}</span>
-          </button>
-        </form>
       </div>
 
       {/* Fund Requests Queue */}
@@ -312,58 +135,105 @@ export default function AdminPaymentsTreasuryPage() {
                 <th className="py-2.5 px-4">Bank</th>
                 <th className="py-2.5 px-4">Mode & UTR</th>
                 <th className="py-2.5 px-4 text-right">Amount</th>
-                <th className="py-2.5 px-4">Status</th>
-                <th className="py-2.5 px-4 text-right">Action</th>
+                <th className="py-2.5 px-4 text-center">Action</th>
+                <th className="py-2.5 px-4 text-right">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
-              {fundRequests.map((req) => (
-                <tr key={req.id} className="hover:bg-slate-50">
-                  <td className="py-2.5 px-4">
-                    <div className="font-bold text-slate-900">
-                      {req.userCompanyName || req.userName}
-                    </div>
-                    <div className="text-[11px] text-slate-400">
-                      {req.userMobile} • {formatDateTime(req.createdAt)}
-                    </div>
-                  </td>
-                  <td className="py-2.5 px-4">
-                    <div className="font-semibold text-slate-800">{req.companyBankName}</div>
-                    <div className="text-[11px] font-mono text-slate-400">{req.companyBankAccount}</div>
-                  </td>
-                  <td className="py-2.5 px-4">
-                    <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-bold text-[10px] mr-1.5">
-                      {req.transferMode}
-                    </span>
-                    <span className="font-mono font-bold text-slate-900">{req.paymentReference}</span>
-                  </td>
-                  <td className="py-2.5 px-4 text-right font-mono font-extrabold text-slate-900">
-                    {formatINR(req.amount)}
-                  </td>
-                  <td className="py-2.5 px-4">
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        req.status === 'approved'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : req.status === 'mismatch'
-                          ? 'bg-amber-50 text-amber-800 border border-amber-300'
-                          : 'bg-blue-50 text-blue-700 border border-blue-200'
-                      }`}
-                    >
-                      {req.status}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-4 text-right">
-                    <button
-                      onClick={() => setSelectedRequest(req)}
-                      className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-slate-900 hover:bg-blue-600 text-white font-bold text-[11px] cursor-pointer"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      Review
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {fundRequests.map((req) => {
+                const isPending = req.status === 'pending' || req.status === 'mismatch';
+                const isLoading = actionLoadingId === req.id;
+
+                return (
+                  <tr key={req.id} className="hover:bg-slate-50 transition">
+                    <td className="py-3 px-4">
+                      <div className="font-bold text-slate-900">
+                        {req.userCompanyName || req.userName}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {req.userMobile} • {formatDateTime(req.createdAt)}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="font-semibold text-slate-800">{req.companyBankName}</div>
+                      <div className="text-[11px] font-mono text-slate-400">{req.companyBankAccount}</div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-bold text-[10px] mr-1.5">
+                        {req.transferMode}
+                      </span>
+                      <span className="font-mono font-bold text-slate-900">{req.paymentReference}</span>
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-extrabold text-slate-900">
+                      {formatINR(req.amount)}
+                    </td>
+
+                    {/* Action Column with Approve / Reject Options */}
+                    <td className="py-3 px-4">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {isPending ? (
+                          <>
+                            <button
+                              type="button"
+                              disabled={isLoading}
+                              onClick={() => handleQuickDecision(req.id, 'approved', Number(req.amount))}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition cursor-pointer shadow-xs disabled:opacity-50"
+                              title="Approve request and credit retailer wallet"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>{isLoading ? '...' : 'Approve'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isLoading}
+                              onClick={() => handleQuickDecision(req.id, 'rejected', Number(req.amount))}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-[11px] transition cursor-pointer disabled:opacity-50"
+                              title="Reject request"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>Reject</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedRequest(req)}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition cursor-pointer"
+                              title="Review details"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedRequest(req)}
+                            className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] transition cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Review</span>
+                          </button>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Status Column on the right side */}
+                    <td className="py-3 px-4 text-right">
+                      <span
+                        className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                          req.status === 'approved'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : req.status === 'rejected'
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                            : req.status === 'mismatch'
+                            ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                            : 'bg-blue-50 text-blue-700 border border-blue-200 animate-pulse'
+                        }`}
+                      >
+                        {req.status}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -383,16 +253,6 @@ export default function AdminPaymentsTreasuryPage() {
                 A/c: {b.accountNumber} • IFSC: {b.ifsc}
               </div>
               {b.upiId && <div className="text-[11px] font-mono text-blue-600 font-semibold">UPI: {b.upiId}</div>}
-              {liveBankBalance?.availableBalance !== null &&
-                liveBankBalance?.availableBalance !== undefined &&
-                b.accountNumber === '9974366033' && (
-                  <div className="pt-1.5 mt-1.5 border-t border-slate-200 flex items-center justify-between text-xs">
-                    <span className="text-slate-500 font-semibold">Live SMS Avl Bal:</span>
-                    <span className="font-mono font-black text-emerald-600">
-                      {formatINR(liveBankBalance.availableBalance)}
-                    </span>
-                  </div>
-                )}
             </div>
           ))}
         </div>
