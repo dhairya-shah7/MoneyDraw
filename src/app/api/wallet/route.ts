@@ -98,10 +98,9 @@ export async function GET(req: NextRequest) {
     const transactions = await Promise.all(
       rawTransactions.map(async (tx) => {
         const cleanAcc = (tx.accountOrVpa || '').trim();
-        const cleanIfsc = (tx.ifsc || '').trim().toUpperCase();
-        const isBankRow = cleanAcc && cleanIfsc && cleanIfsc !== 'WALLET-P2P';
-        if (!isBankRow) return { ...tx, qrDataUrl: '', upiUri: '' };
-        const targetVpa = cleanAcc.includes('@') ? cleanAcc : `${cleanAcc}@${cleanIfsc}.ifsc.npci`;
+        const isUpiVpa = cleanAcc && cleanAcc.includes('@');
+        if (!isUpiVpa) return { ...tx, qrDataUrl: '', upiUri: '' };
+        const targetVpa = cleanAcc;
         const params = new URLSearchParams();
         params.set('pa', targetVpa);
         params.set('pn', (tx.customerName || 'Beneficiary').trim());

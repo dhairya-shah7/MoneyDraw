@@ -19,6 +19,7 @@ import {
   Banknote,
   BookmarkPlus,
   Trash2,
+  ShieldCheck,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
 import { useApp } from '@/components/providers/AppContext';
@@ -619,44 +620,41 @@ export default function UserWalletPage() {
     <AppShell>
       <div className="space-y-5">
         {/* Wallet Balance Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col justify-between">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase">
                 <span>Main Wallet Balance</span>
                 <Wallet className="w-4 h-4 text-blue-600" />
               </div>
-              <div className="text-2xl font-black text-slate-900 mt-1.5">{formatINR(w?.availableBalance)}</div>
-              <div className="text-[11px] text-slate-400 mt-0.5">Ready to Pay Any Bank or User</div>
+              <div className="text-3xl font-black text-slate-900 mt-2">{formatINR(w?.availableBalance)}</div>
+              <div className="text-xs text-slate-400 mt-1">Platform Float for Customer Bank Transfers (0% Extra Fees)</div>
             </div>
             <button
               type="button"
               onClick={() => setTopUpModalOpen(true)}
-              className="mt-3 w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
+              className="mt-4 w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer shadow-xs"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Top Up / Request Funds</span>
+              <Plus className="w-4 h-4" />
+              <span>Top Up / Request Funds from Admin</span>
             </button>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs">
-            <div className="flex items-center justify-between text-xs font-bold text-violet-700 uppercase">
-              <span>Commission Wallet</span>
-              <TrendingUp className="w-4 h-4 text-violet-600" />
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase">
+                <span>Hold / Security Reserve</span>
+                <Lock className="w-4 h-4 text-amber-600" />
+              </div>
+              <div className="text-3xl font-black text-slate-900 mt-2">
+                {formatINR((w?.holdBalance || 0) + (w?.capBalance || 0))}
+              </div>
+              <div className="text-xs text-slate-400 mt-1">Lien / minimum reserve balance</div>
             </div>
-            <div className="text-2xl font-black text-violet-700 mt-1.5">{formatINR(w?.commissionBalance)}</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Earned commissions</div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase">
-              <span>Hold / Reserve</span>
-              <Lock className="w-4 h-4 text-amber-600" />
+            <div className="mt-4 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 font-medium flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Admin-secured float wallet without personal bank linking</span>
             </div>
-            <div className="text-2xl font-black text-slate-900 mt-1.5">
-              {formatINR((w?.holdBalance || 0) + (w?.capBalance || 0))}
-            </div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Lien / minimum reserve</div>
           </div>
         </div>
 
@@ -1074,36 +1072,7 @@ export default function UserWalletPage() {
           </div>
         )}
 
-        {/* Move Earned Commission to Main Wallet */}
-        {Number(w?.commissionBalance || 0) > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h2 className="text-sm font-black text-slate-900">Transfer Earned Commission to Main Wallet</h2>
-              <p className="text-xs text-slate-500">
-                Available Commission: <strong>{formatINR(w?.commissionBalance)}</strong>
-              </p>
-            </div>
-            <div className="flex items-end gap-2.5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Amount (₹)</label>
-                <input
-                  type="number"
-                  value={commTransferAmt}
-                  onChange={(e) => setCommTransferAmt(e.target.value)}
-                  className="w-36 px-3 py-2 rounded-xl border border-slate-300 text-sm font-black text-slate-900"
-                />
-              </div>
-              <button
-                onClick={handleCommissionTransfer}
-                disabled={transferring}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <ArrowLeftRight className="w-3.5 h-3.5" />
-                Transfer to Main
-              </button>
-            </div>
-          </div>
-        )}
+
 
         {/* ADD BENEFICIARY MODAL */}
         {addBeneModalOpen && (
@@ -1282,36 +1251,58 @@ export default function UserWalletPage() {
                   </div>
                 </div>
 
-                {/* Direct Bank UPI QR */}
-                {activePayRow.qrDataUrl && (
+                {/* Direct Bank Transfer Status Card */}
+                {!activePayRow.accountOrVpa?.includes('@') && activePayRow.ifsc !== 'WALLET-P2P' ? (
+                  <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-xs shadow-xs">
+                          IMPS
+                        </div>
+                        <div>
+                          <div className="text-xs font-black text-emerald-950">Direct Bank Transfer Successful</div>
+                          <div className="text-[11px] text-emerald-700">Executed via Cashfree Bank Payout Rail</div>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 uppercase tracking-wide">
+                        Processed
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-emerald-100 text-[11px]">
+                      <div>
+                        <span className="text-emerald-700">Transfer Rail:</span>
+                        <span className="font-bold text-slate-900 ml-1">IMPS / NEFT (Bank-to-Bank)</span>
+                      </div>
+                      <div>
+                        <span className="text-emerald-700">Extra Charges:</span>
+                        <span className="font-bold text-emerald-700 ml-1">₹0.00 (Zero Fee)</span>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-emerald-800">
+                      Amount <strong>{formatINR(activePayRow.amount)}</strong> debited directly from Retailer Main Wallet and credited to beneficiary bank account.
+                    </p>
+                  </div>
+                ) : activePayRow.qrDataUrl ? (
+                  /* Only for direct UPI VPA payments */
                   <div className="p-4 rounded-2xl bg-blue-50/50 border border-blue-200 flex flex-col sm:flex-row items-center gap-4">
                     <img
                       src={activePayRow.qrDataUrl}
-                      alt="Bank UPI QR"
+                      alt="UPI QR"
                       className="w-32 h-32 rounded-xl bg-white p-1.5 border border-slate-200 shrink-0"
                     />
                     <div className="space-y-2 text-center sm:text-left">
                       <div className="text-xs font-black text-slate-900 flex items-center justify-center sm:justify-start gap-1.5">
                         <QrCode className="w-4 h-4 text-blue-600" />
-                        <span>Direct Bank UPI QR (NPCI IFSC Rail)</span>
+                        <span>UPI Payment QR</span>
                       </div>
                       <p className="text-[11px] text-slate-600">
-                        Scan with any UPI App (GPay, PhonePe, Paytm, Kotak) to pay{' '}
-                        <strong>{formatINR(quickPayAmount || activePayRow.amount)}</strong> directly into{' '}
-                        <strong>{activePayRow.customerName}</strong>&apos;s bank account.
+                        Scan with any UPI App (GPay, PhonePe, Paytm) to pay{' '}
+                        <strong>{formatINR(quickPayAmount || activePayRow.amount)}</strong> directly to{' '}
+                        <strong>{activePayRow.customerName}</strong> ({activePayRow.accountOrVpa}).
                       </p>
-                      {activePayRow.upiUri && (
-                        <a
-                          href={activePayRow.upiUri}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          Open UPI App to Pay
-                        </a>
-                      )}
                     </div>
                   </div>
-                )}
+                ) : null}
 
                 {/* 1-Click Pay Again from Main Wallet */}
                 <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">

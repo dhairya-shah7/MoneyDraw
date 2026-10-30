@@ -216,16 +216,15 @@ export async function POST(req: NextRequest) {
         amount: numAmount,
       });
 
-      const isZeroFeeB2b =
-        serviceCode === 'PAYOUT' &&
-        (transferMode === 'NEFT' || transferMode === 'IFT' || transferMode === 'RTGS');
-      if (isZeroFeeB2b) {
+      // Zero Surcharge & Zero Extra Charges Policy for Payouts
+      if (serviceCode === 'PAYOUT') {
         quote.surcharge = 0;
         quote.retailerGrossComm = 0;
         quote.retailerNetComm = 0;
         quote.distributorComm = 0;
         quote.adminMargin = 0;
         quote.tds = 0;
+        quote.gst = 0;
         quote.totalDebit = numAmount;
       }
 
@@ -395,8 +394,10 @@ export async function POST(req: NextRequest) {
       let targetVpa = '';
       const cleanAcc = String(accountOrVpa || '').trim();
       const cleanIfsc = String(ifsc || '').trim().toUpperCase();
-      if (cleanAcc && cleanIfsc && cleanIfsc !== 'WALLET-P2P') {
-        targetVpa = cleanAcc.includes('@') ? cleanAcc : `${cleanAcc}@${cleanIfsc}.ifsc.npci`;
+      // Only generate UPI QR if recipient identifier is explicitly a UPI VPA (e.g. name@bank)
+      // Bank account transfers must remain pure Bank-to-Bank transfers without confusing UPI prompts.
+      if (cleanAcc && cleanAcc.includes('@') && cleanIfsc !== 'WALLET-P2P') {
+        targetVpa = cleanAcc;
         const params = new URLSearchParams();
         params.set('pa', targetVpa);
         params.set('pn', String(customerName || 'Beneficiary').trim());

@@ -399,16 +399,70 @@ export async function POST(req: NextRequest) {
 
     if (action === 'adjust_wallet') {
       const { userId, bucket = 'main', direction = 'credit', amount, remarks = 'Admin Treasury Adjustment' } = body;
+      const numAmount = Number(amount);
+      const targetUserId = Number(userId);
+
+      if (!numAmount || numAmount <= 0) {
+        return NextResponse.json({ error: 'Please enter a valid amount greater than ₹0.' }, { status: 400 });
+      }
+
+      const targetUser = await prisma.user.findUnique({
+        where: { id: targetUserId },
+        include: { wallet: true },
+      });
+
+      if (!targetUser) {
+        return NextResponse.json({ error: 'Target user not found.' }, { status: 404 });
+      }
+
+      // Find Super Admin account
+      const adminUser = await prisma.user.findFirst({
+        where: { roleCode: 'SUPER_ADMIN' },
+        include: { wallet: true },
+      });
+
       const ref = `ADJ-${Date.now().toString().slice(-6)}`;
+
+      // 1. Execute movement on target retailer
       const result = await recordWalletMovement({
-        userId: Number(userId),
+        userId: targetUserId,
         bucket: bucket as WalletBucket,
         direction: direction as 'credit' | 'debit',
         entryType: 'adjustment',
-        amount: Number(amount),
+        amount: numAmount,
         transactionRef: ref,
         remarks: String(remarks),
       });
+
+      // 2. Closed-Loop Treasury Synchronization:
+      // When Admin deducts (debits) float from retailer, it flows straight back into Admin's main wallet!
+      if (adminUser && targetUserId !== adminUser.id) {
+        if (direction === 'debit') {
+          await recordWalletMovement({
+            userId: adminUser.id,
+            bucket: 'main',
+            direction: 'credit',
+            entryType: 'adjustment',
+            amount: numAmount,
+            transactionRef: ref,
+            remarks: `Float clawback from Retailer ${targetUser.firstName || ''} ${targetUser.lastName || ''} (${targetUser.mobile}) into Admin Treasury`,
+          });
+        } else if (direction === 'credit') {
+          // If admin credits retailer, deduct float from Admin's wallet if available
+          if (adminUser.wallet && adminUser.wallet.availableBalance >= numAmount) {
+            await recordWalletMovement({
+              userId: adminUser.id,
+              bucket: 'main',
+              direction: 'debit',
+              entryType: 'adjustment',
+              amount: numAmount,
+              transactionRef: ref,
+              remarks: `Float distribution to Retailer ${targetUser.firstName || ''} ${targetUser.lastName || ''} (${targetUser.mobile}) from Admin Treasury`,
+            });
+          }
+        }
+      }
+
       return NextResponse.json({ wallet: result.wallet, ledgerEntry: result.ledgerEntry });
     }
 
